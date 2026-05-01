@@ -1,9 +1,24 @@
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { incidents } from '../data/mockData'
+import { supabase } from '../lib/supabase'
 
 export default function Incidents() {
   const navigate = useNavigate()
+  const [incidents, setIncidents] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    async function fetchIncidents() {
+      const { data, error } = await supabase.from('incidents').select('*').order('created_at', { ascending: false })
+      if (!error) setIncidents(data)
+      setLoading(false)
+    }
+    fetchIncidents()
+  }, [])
+
   const ragColor = { active: 'red', resolved: 'green' }
+
+  if (loading) return <div style={{ padding: '2rem', color: 'var(--muted)' }}>Loading...</div>
 
   return (
     <>

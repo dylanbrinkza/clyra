@@ -1,18 +1,29 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { assets } from '../data/mockData'
+import { supabase } from '../lib/supabase'
 
 export default function AssetRegister() {
   const navigate = useNavigate()
+  const [assets, setAssets] = useState([])
+  const [loading, setLoading] = useState(true)
   const [tierFilter, setTierFilter] = useState('all')
   const [statusFilter, setStatusFilter] = useState('all')
   const [typeFilter, setTypeFilter] = useState('all')
+
+  useEffect(() => {
+    async function fetchAssets() {
+      const { data, error } = await supabase.from('assets').select('*').order('tier')
+      if (!error) setAssets(data)
+      setLoading(false)
+    }
+    fetchAssets()
+  }, [])
 
   const filtered = assets.filter(a => {
     if (tierFilter !== 'all' && a.tier !== parseInt(tierFilter)) return false
     if (typeFilter !== 'all' && a.type !== typeFilter) return false
     if (statusFilter !== 'all') {
-      const s = a.status.toLowerCase()
+      const s = (a.status || '').toLowerCase()
       if (statusFilter === 'overdue' && !s.includes('overdue') && !s.includes('expired')) return false
       if (statusFilter === 'assessment' && !s.includes('assessment')) return false
       if (statusFilter === 'awaiting' && !s.includes('awaiting')) return false
@@ -20,6 +31,8 @@ export default function AssetRegister() {
     }
     return true
   })
+
+  if (loading) return <div style={{ padding: '2rem', color: 'var(--muted)' }}>Loading...</div>
 
   return (
     <>
@@ -69,7 +82,7 @@ export default function AssetRegister() {
                     {asset.rag.charAt(0).toUpperCase() + asset.rag.slice(1)}
                   </span>
                 </td>
-                <td style={{ fontSize: 12, color: 'var(--muted)' }}>{asset.reviewDue}</td>
+                <td style={{ fontSize: 12, color: 'var(--muted)' }}>{asset.review_due}</td>
               </tr>
             ))}
           </tbody>

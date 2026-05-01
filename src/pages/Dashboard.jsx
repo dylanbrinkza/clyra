@@ -1,26 +1,42 @@
+import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { assets } from '../data/mockData'
-
-const ragClass = { red: 'red', amber: 'amber', green: 'green' }
-const statusRag = (status) => {
-  if (status.toLowerCase().includes('overdue') || status.toLowerCase().includes('expired')) return 'red'
-  if (status.toLowerCase().includes('assessment') || status.toLowerCase().includes('awaiting')) return 'amber'
-  return 'green'
-}
+import { supabase } from '../lib/supabase'
 
 export default function Dashboard() {
   const navigate = useNavigate()
+  const [assets, setAssets] = useState([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    async function fetchAssets() {
+      const { data, error } = await supabase.from('assets').select('*').order('tier')
+      if (!error) setAssets(data)
+      setLoading(false)
+    }
+    fetchAssets()
+  }, [])
+
   const red = assets.filter(a => a.rag === 'red').length
   const amber = assets.filter(a => a.rag === 'amber').length
   const green = assets.filter(a => a.rag === 'green').length
+
+  const statusRag = (status) => {
+    if (!status) return ''
+    const s = status.toLowerCase()
+    if (s.includes('overdue') || s.includes('expired')) return 'red'
+    if (s.includes('assessment') || s.includes('awaiting')) return 'amber'
+    return 'green'
+  }
+
+  if (loading) return <div style={{ padding: '2rem', color: 'var(--muted)' }}>Loading...</div>
 
   return (
     <>
       <div className="stat-grid">
         <div className="stat-card"><div className="stat-num">{assets.length}</div><div className="stat-label">Total assets</div></div>
-        <div className="stat-card"><div className={`stat-num red`}>{red}</div><div className="stat-label">Red — action needed</div></div>
-        <div className="stat-card"><div className={`stat-num amber`}>{amber}</div><div className="stat-label">Amber — in review</div></div>
-        <div className="stat-card"><div className={`stat-num green`}>{green}</div><div className="stat-label">Green — assured</div></div>
+        <div className="stat-card"><div className="stat-num red">{red}</div><div className="stat-label">Red — action needed</div></div>
+        <div className="stat-card"><div className="stat-num amber">{amber}</div><div className="stat-label">Amber — in review</div></div>
+        <div className="stat-card"><div className="stat-num green">{green}</div><div className="stat-label">Green — assured</div></div>
       </div>
 
       <div className="dash-grid">

@@ -75,41 +75,26 @@ export default function NewQuestionnaire() {
   const saveAndSend = async () => {
     setLoading(true)
     setError('')
-    setLoadingMsg('Saving asset and questionnaire...')
+    setLoadingMsg('Saving questionnaire...')
     try {
       const { data: { user } } = await supabase.auth.getUser()
-      const assetId = assetName.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-') + '-' + Date.now()
 
-      const { error: assetError } = await supabase.from('assets').insert([{
-        id: assetId,
-        name: assetName,
-        type: assetType,
-        tier: tierResult.tier,
-        rag: 'amber',
-        score: 50,
-        status: 'In assessment',
-        last_assessed: 'Pending',
-        company_name: companyName,
-        contact_name: vendorName,
-        contact_email: vendorEmail,
-        contract_reference: contractRef,
-        integration_notes: integrationNotes,
-        questionnaire_status: 'sent',
-        certification_status: 'not requested',
-        added_by: user?.email || 'unknown',
-      }])
-      if (assetError) throw new Error(assetError.message)
-
+      // Save questionnaire only — no asset created yet
       const { data: qData, error: qError } = await supabase
         .from('questionnaires')
         .insert([{
-          asset_id: assetId,
           asset_name: assetName,
+          asset_type: assetType,
+          company_name: companyName,
           tier: tierResult.tier,
           tier_justification: tierResult.justification,
           status: 'sent',
+          approval_status: 'pending',
           vendor_email: vendorEmail,
           vendor_name: vendorName,
+          contract_reference: contractRef,
+          integration_notes: integrationNotes,
+          created_by: user?.email || 'unknown',
           ...profile,
         }])
         .select()
@@ -127,7 +112,7 @@ export default function NewQuestionnaire() {
       const { error: qqError } = await supabase.from('questionnaire_questions').insert(questionsToInsert)
       if (qqError) throw new Error(qqError.message)
 
-      navigate(`/assets/${assetId}`)
+      navigate(`/questionnaires/${qData.id}`)
     } catch (err) {
       setError(err.message)
     }
@@ -193,11 +178,11 @@ export default function NewQuestionnaire() {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
             <div>
               <label style={labelStyle}>Contract reference</label>
-              <input value={contractRef} onChange={e => setContractRef(e.target.value)} placeholder="e.g. MSA-2024-001 or doc link" style={inputStyle} />
+              <input value={contractRef} onChange={e => setContractRef(e.target.value)} placeholder="e.g. MSA-2024-001" style={inputStyle} />
             </div>
             <div>
               <label style={labelStyle}>Integration notes</label>
-              <input value={integrationNotes} onChange={e => setIntegrationNotes(e.target.value)} placeholder="What does this asset connect to?" style={inputStyle} />
+              <input value={integrationNotes} onChange={e => setIntegrationNotes(e.target.value)} placeholder="What does this connect to?" style={inputStyle} />
             </div>
           </div>
 
@@ -220,7 +205,7 @@ export default function NewQuestionnaire() {
           <button className="btn btn-primary" style={{ width: '100%' }} onClick={runProfile} disabled={loading || !assetName}>
             {loading ? (
               <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
-                <span style={{ width: 14, height: 14, border: '2px solid rgba(245,240,232,0.3)', borderTopColor: '#F5F0E8', borderRadius: '50%', animation: 'spin 0.8s linear infinite', display: 'inline-block' }} />
+                <span style={spinnerStyle} />
                 {loadingMsg}
               </span>
             ) : 'Analyse risk profile →'}
@@ -270,10 +255,14 @@ export default function NewQuestionnaire() {
 
           <div className="card">
             <div className="card-header"><span className="card-title">Review & send</span></div>
+            <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 16, lineHeight: 1.6 }}>
+              Once sent, the vendor completes the questionnaire via a secure link. After AI evaluation, the questionnaire will sit in a <strong>pending approval</strong> state — you review the verdict and manually approve it to add the asset to your register.
+            </div>
             <div style={{ background: 'var(--cream)', borderRadius: 8, padding: '12px 14px', marginBottom: 16, fontSize: 13 }}>
               {[
                 ['Asset', assetName],
                 ['Type', assetType],
+                ['Company', companyName || '—'],
                 ['Vendor contact', vendorName || '—'],
                 ['Email', vendorEmail || '—'],
                 ['Tier', `Tier ${tierResult.tier} — ${tierResult.label}`],
@@ -294,10 +283,10 @@ export default function NewQuestionnaire() {
               <button className="btn btn-primary" onClick={saveAndSend} disabled={loading} style={{ flex: 2 }}>
                 {loading ? (
                   <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
-                    <span style={{ width: 14, height: 14, border: '2px solid rgba(245,240,232,0.3)', borderTopColor: '#F5F0E8', borderRadius: '50%', animation: 'spin 0.8s linear infinite', display: 'inline-block' }} />
+                    <span style={spinnerStyle} />
                     {loadingMsg}
                   </span>
-                ) : 'Save asset & questionnaire →'}
+                ) : 'Save & send questionnaire →'}
               </button>
             </div>
           </div>
@@ -310,3 +299,4 @@ export default function NewQuestionnaire() {
 const labelStyle = { fontSize: 12, fontWeight: 500, color: 'var(--muted)', display: 'block', marginBottom: 6 }
 const inputStyle = { width: '100%', padding: '9px 12px', border: '0.5px solid rgba(44,31,14,0.25)', borderRadius: 8, fontSize: 13, background: '#fff', color: 'var(--text)', outline: 'none', fontFamily: 'inherit' }
 const errorStyle = { fontSize: 12, color: 'var(--red)', padding: '8px 12px', background: '#FCEBEB', borderRadius: 6, marginBottom: 16 }
+const spinnerStyle = { width: 14, height: 14, border: '2px solid rgba(245,240,232,0.3)', borderTopColor: '#F5F0E8', borderRadius: '50%', animation: 'spin 0.8s linear infinite', display: 'inline-block', flexShrink: 0 }

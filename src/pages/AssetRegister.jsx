@@ -1,23 +1,26 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import AddAssetModal from '../components/AddAssetModal'
 
 export default function AssetRegister() {
   const navigate = useNavigate()
   const [assets, setAssets] = useState([])
   const [loading, setLoading] = useState(true)
+  const [showAdd, setShowAdd] = useState(false)
   const [tierFilter, setTierFilter] = useState('all')
   const [statusFilter, setStatusFilter] = useState('all')
   const [typeFilter, setTypeFilter] = useState('all')
 
   useEffect(() => {
-    async function fetchAssets() {
-      const { data, error } = await supabase.from('assets').select('*').order('tier')
-      if (!error) setAssets(data)
-      setLoading(false)
-    }
     fetchAssets()
   }, [])
+
+  async function fetchAssets() {
+    const { data, error } = await supabase.from('assets').select('*').order('tier')
+    if (!error) setAssets(data)
+    setLoading(false)
+  }
 
   const filtered = assets.filter(a => {
     if (tierFilter !== 'all' && a.tier !== parseInt(tierFilter)) return false
@@ -36,10 +39,21 @@ export default function AssetRegister() {
 
   return (
     <>
+      {showAdd && (
+        <AddAssetModal
+          onClose={() => setShowAdd(false)}
+          onAdded={(asset) => {
+            setAssets(prev => [...prev, asset].sort((a, b) => a.tier - b.tier))
+            setShowAdd(false)
+          }}
+        />
+      )}
+
       <div className="page-header">
         <h2>Asset register</h2>
-        <button className="btn btn-primary">+ Add asset</button>
+        <button className="btn btn-primary" onClick={() => setShowAdd(true)}>+ Add asset</button>
       </div>
+
       <div className="card">
         <div className="filter-row">
           <select value={tierFilter} onChange={e => setTierFilter(e.target.value)}>
@@ -61,6 +75,8 @@ export default function AssetRegister() {
             <option value="SaaS">SaaS</option>
             <option value="Cloud infra">Cloud infra</option>
             <option value="Managed service">Managed service</option>
+            <option value="Physical asset">Physical asset</option>
+            <option value="Internal tool">Internal tool</option>
           </select>
         </div>
         <table className="data-table">

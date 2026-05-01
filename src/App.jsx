@@ -7,6 +7,9 @@ import Dashboard from './pages/Dashboard'
 import AssetRegister from './pages/AssetRegister'
 import AssetDetail from './pages/AssetDetail'
 import Questionnaires from './pages/Questionnaires'
+import NewQuestionnaire from './pages/NewQuestionnaire'
+import QuestionnaireDetail from './pages/QuestionnaireDetail'
+import VendorPortal from './pages/VendorPortal'
 import Certifications from './pages/Certifications'
 import RiskRegister from './pages/RiskRegister'
 import Incidents from './pages/Incidents'
@@ -21,12 +24,8 @@ export default function App() {
   const [session, setSession] = useState(undefined)
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session)
-    })
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setSession(session)
-    })
+    supabase.auth.getSession().then(({ data: { session } }) => setSession(session))
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => setSession(session))
     return () => subscription.unsubscribe()
   }, [])
 
@@ -39,6 +38,7 @@ export default function App() {
   return (
     <Routes>
       <Route path="/login" element={session ? <Navigate to="/dashboard" replace /> : <Login />} />
+      <Route path="/vendor/:token" element={<VendorPortal />} />
       <Route path="/" element={
         <ProtectedRoute session={session}>
           <Layout session={session} />
@@ -49,6 +49,8 @@ export default function App() {
         <Route path="assets" element={<AssetRegister />} />
         <Route path="assets/:id" element={<AssetDetail />} />
         <Route path="questionnaires" element={<Questionnaires />} />
+        <Route path="questionnaires/new" element={<NewQuestionnaire />} />
+        <Route path="questionnaires/:id" element={<QuestionnaireDetail />} />
         <Route path="certifications" element={<Certifications />} />
         <Route path="risk" element={<RiskRegister />} />
         <Route path="incidents" element={<Incidents />} />

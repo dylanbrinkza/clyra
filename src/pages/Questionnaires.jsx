@@ -1,180 +1,79 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { supabase } from '../lib/supabase'
 
-const sections = [
-  { label: 'Access control', status: 'complete' },
-  { label: 'Information security', status: 'complete' },
-  { label: 'Data protection', status: 'active' },
-  { label: 'Incident management', status: 'pending' },
-  { label: 'Third-party mgmt', status: 'pending' },
-  { label: 'Vulnerability mgmt', status: 'pending' },
-  { label: 'Compliance', status: 'pending' },
-]
-
-const sampleResponses = [
-  { question: 'Do you enforce MFA for all admin users?', answer: 'MFA is enforced for most users but not for API access accounts.' },
-  { question: 'Do you have an information security policy?', answer: 'Yes, reviewed annually and aligned to ISO 27001.' },
-  { question: 'Which legal bases do you rely on for processing personal data?', answer: 'Contract + consent where required.' },
-  { question: 'Do you have a documented incident response plan?', answer: 'Yes, tested bi-annually with tabletop exercises.' },
-  { question: 'Do you conduct regular vulnerability scanning?', answer: 'Yes, weekly automated scans plus annual penetration testing.' },
-  { question: 'Do you disclose your sub-processors in your DPA?', answer: 'Sub-processors are listed on our website but not in the DPA itself.' },
-]
-
-const options = [
-  'Contract performance only',
-  'Contract + legitimate interests',
-  'Contract + consent where required',
-  'Other / varies by jurisdiction',
-]
+const statusColor = { draft: 'var(--muted)', sent: 'var(--amber)', completed: 'var(--green)' }
+const verdictBadge = {
+  'Accept': { bg: '#EAF3DE', color: 'var(--green)' },
+  'Accept with conditions': { bg: '#FAEEDA', color: 'var(--amber)' },
+  'Escalate for further review': { bg: '#FAEEDA', color: 'var(--amber)' },
+  'Do not proceed': { bg: '#FAECE7', color: 'var(--red)' },
+}
 
 export default function Questionnaires() {
-  const [selected, setSelected] = useState(2)
-  const [assessing, setAssessing] = useState(false)
-  const [assessment, setAssessment] = useState(null)
-  const [error, setError] = useState('')
+  const navigate = useNavigate()
+  const [questionnaires, setQuestionnaires] = useState([])
+  const [loading, setLoading] = useState(true)
 
-  const runAssessment = async () => {
-    setAssessing(true)
-    setError('')
-    setAssessment(null)
-    try {
-      const res = await fetch('/api/assess', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          assetName: 'Salesforce CRM',
-          tier: 1,
-          responses: sampleResponses,
-        }),
-      })
-      const data = await res.json()
-      if (!res.ok) throw new Error(data.error || 'Assessment failed')
-      setAssessment(data)
-    } catch (err) {
-      setError(err.message)
+  useEffect(() => {
+    async function fetch() {
+      const { data, error } = await supabase
+        .from('questionnaires')
+        .select('*')
+        .order('created_at', { ascending: false })
+      if (!error) setQuestionnaires(data)
+      setLoading(false)
     }
-    setAssessing(false)
-  }
+    fetch()
+  }, [])
 
-  const severityColor = { Required: 'var(--red)', Recommended: 'var(--amber)', Advisory: '#aaa' }
-  const verdictColor = {
-    'Accept': 'var(--green)',
-    'Accept with conditions': 'var(--amber)',
-    'Escalate for further review': 'var(--amber)',
-    'Do not proceed': 'var(--red)',
-  }
+  const tierBadge = { 1: 't1', 2: 't2', 3: 't3', 4: 't4' }
+
+  if (loading) return <div style={{ padding: '2rem', color: 'var(--muted)' }}>Loading...</div>
 
   return (
     <>
       <div className="page-header">
         <h2>Questionnaires</h2>
-        <button className="btn btn-primary">+ Send questionnaire</button>
+        <button className="btn btn-primary" onClick={() => navigate('/questionnaires/new')}>+ New questionnaire</button>
       </div>
 
-      <div className="card">
-        <div className="q-layout">
-          <div className="q-sidebar">
-            {sections.map((s, i) => (
-              <div key={i} className={`q-section-item${s.status === 'active' ? ' active-section' : ''}`}>
-                <div className={`q-section-dot${s.status === 'complete' ? ' complete' : s.status === 'active' ? ' active-q' : ''}`}>
-                  {s.status === 'complete' ? '✓' : ''}
-                </div>
-                {s.label}
-              </div>
-            ))}
-          </div>
-          <div className="q-main">
-            <div className="q-meta">Question 13 of 42 · Data protection</div>
-            <div className="q-text">Which legal bases do you rely on for processing personal data provided by your clients?</div>
-            {options.map((opt, i) => (
-              <div key={i} className={`q-option${selected === i ? ' selected' : ''}`} onClick={() => setSelected(i)}>
-                <div className={`q-radio${selected === i ? ' selected' : ''}`}></div>
-                {opt}
-              </div>
-            ))}
-            {selected === 2 && (
-              <div className="q-follow-up">
-                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" style={{ marginTop: 1, flexShrink: 0 }}>
-                  <circle cx="8" cy="8" r="6"/><path d="M8 5v3.5M8 11v.5"/>
-                </svg>
-                As a Tier 1 vendor with access to special category data, Clyra will ask a follow-up question about your consent management process.
-              </div>
-            )}
-            <div className="q-nav">
-              <button className="btn">← Previous</button>
-              <button className="btn btn-primary">Next →</button>
-            </div>
-          </div>
+      {questionnaires.length === 0 ? (
+        <div className="card" style={{ textAlign: 'center', padding: '3rem', color: 'var(--muted)' }}>
+          <div style={{ fontSize: 14, marginBottom: 8 }}>No questionnaires yet</div>
+          <div style={{ fontSize: 13, marginBottom: 20 }}>Create your first vendor risk questionnaire to get started.</div>
+          <button className="btn btn-primary" onClick={() => navigate('/questionnaires/new')}>+ New questionnaire</button>
         </div>
-      </div>
-
-      <div className="card">
-        <div className="card-header">
-          <span className="card-title">AI Assessment</span>
-          <button className="btn btn-primary" onClick={runAssessment} disabled={assessing}>
-            {assessing ? 'Assessing...' : 'Run AI assessment'}
-          </button>
+      ) : (
+        <div className="card">
+          <table className="data-table">
+            <thead>
+              <tr><th>Vendor</th><th>Tier</th><th>Status</th><th>Verdict</th><th>Questions</th><th>Created</th></tr>
+            </thead>
+            <tbody>
+              {questionnaires.map(q => (
+                <tr key={q.id} className="clickable" onClick={() => navigate(`/questionnaires/${q.id}`)}>
+                  <td>
+                    <div style={{ fontWeight: 500 }}>{q.asset_name}</div>
+                    {q.vendor_name && <div style={{ fontSize: 11, color: 'var(--muted)' }}>{q.vendor_name}</div>}
+                  </td>
+                  <td><span className={`tier-badge ${tierBadge[q.tier]}`}>Tier {q.tier}</span></td>
+                  <td style={{ fontSize: 12, color: statusColor[q.status], textTransform: 'capitalize' }}>{q.status}</td>
+                  <td>
+                    {q.verdict ? (
+                      <span style={{ fontSize: 11, padding: '3px 8px', borderRadius: 4, fontWeight: 500, background: verdictBadge[q.verdict]?.bg, color: verdictBadge[q.verdict]?.color }}>
+                        {q.verdict}
+                      </span>
+                    ) : <span style={{ color: 'var(--muted)', fontSize: 12 }}>Pending</span>}
+                  </td>
+                  <td style={{ fontSize: 12, color: 'var(--muted)' }}>{q.score || '—'}</td>
+                  <td style={{ fontSize: 12, color: 'var(--muted)' }}>{new Date(q.created_at).toLocaleDateString()}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
-
-        {error && (
-          <div style={{ fontSize: 13, color: 'var(--red)', padding: '10px 12px', background: '#FCEBEB', borderRadius: 6, marginBottom: 12 }}>
-            {error}
-          </div>
-        )}
-
-        {assessing && (
-          <div style={{ fontSize: 13, color: 'var(--muted)', padding: '1rem 0' }}>
-            Claude is reviewing the questionnaire responses...
-          </div>
-        )}
-
-        {assessment && (
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 16, padding: '1rem', background: 'var(--cream)', borderRadius: 8 }}>
-              <div>
-                <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 2 }}>Risk score</div>
-                <div style={{ fontSize: 28, fontWeight: 500 }}>{assessment.score}</div>
-              </div>
-              <div style={{ width: 1, height: 40, background: 'var(--border)' }}></div>
-              <div>
-                <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 2 }}>Verdict</div>
-                <div style={{ fontSize: 14, fontWeight: 500, color: verdictColor[assessment.verdict] || 'var(--text)' }}>
-                  {assessment.verdict}
-                </div>
-              </div>
-            </div>
-
-            <p style={{ fontSize: 13, color: 'var(--muted)', lineHeight: 1.6, marginBottom: 16 }}>{assessment.summary}</p>
-
-            {assessment.findings?.length > 0 && (
-              <div style={{ marginBottom: 16 }}>
-                <div style={{ fontSize: 12, fontWeight: 500, marginBottom: 10 }}>Findings</div>
-                {assessment.findings.map((f, i) => (
-                  <div key={i} className="finding-row">
-                    <div className="finding-dot" style={{ background: severityColor[f.severity] || '#aaa' }}></div>
-                    <div className="finding-text">
-                      {f.text}
-                      {f.control && <span style={{ fontSize: 11, color: 'var(--muted)', marginLeft: 8 }}>{f.control}</span>}
-                    </div>
-                    <span className={`finding-badge ${(f.severity || '').toLowerCase()}`}>{f.severity}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {assessment.strengths?.length > 0 && (
-              <div>
-                <div style={{ fontSize: 12, fontWeight: 500, marginBottom: 10 }}>Strengths</div>
-                {assessment.strengths.map((s, i) => (
-                  <div key={i} className="finding-row">
-                    <div className="finding-dot" style={{ background: 'var(--green)' }}></div>
-                    <div className="finding-text">{s}</div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-      </div>
+      )}
     </>
   )
 }

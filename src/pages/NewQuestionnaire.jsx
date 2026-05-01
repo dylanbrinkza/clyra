@@ -38,7 +38,7 @@ export default function NewQuestionnaire() {
   const runProfile = async () => {
     setLoading(true)
     setError('')
-    setLoadingMsg('Analysing risk profile...')
+    setLoadingMsg('Analysing your risk profile...')
     try {
       const res = await fetch('/api/profile', {
         method: 'POST',
@@ -49,7 +49,7 @@ export default function NewQuestionnaire() {
       if (!res.ok) throw new Error(data.error)
       setTierResult(data)
 
-      setLoadingMsg('Generating questionnaire questions...')
+      setLoadingMsg('Hold tight — generating tailored questions...')
       const res2 = await fetch('/api/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -177,10 +177,20 @@ export default function NewQuestionnaire() {
 
           {error && <div style={errorStyle}>{error}</div>}
 
-          <button className="btn btn-primary" style={{ width: '100%' }}
+          <button className="btn btn-primary" style={{ width: '100%', opacity: loading ? 1 : 1, position: 'relative' }}
             onClick={runProfile} disabled={loading || !assetName}>
-            {loading ? loadingMsg || 'Working...' : 'Analyse risk profile →'}
+            {loading ? (
+              <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
+                <span style={{
+                  width: 14, height: 14, border: '2px solid rgba(245,240,232,0.3)',
+                  borderTopColor: '#F5F0E8', borderRadius: '50%',
+                  animation: 'spin 0.8s linear infinite', display: 'inline-block', flexShrink: 0,
+                }} />
+                {loadingMsg || 'Working...'}
+              </span>
+            ) : 'Analyse risk profile →'}
           </button>
+          <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
         </div>
       )}
 

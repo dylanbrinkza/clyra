@@ -1,0 +1,634 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Clyra — Security, Risk & Compliance</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --brown:#2C1F0E;
+  --brown-dark:#1A1208;
+  --cream:#F5F0E8;
+  --cream2:#EDE7DA;
+  --orange:#B5490A;
+  --orange-light:#E8C4A0;
+  --amber:#D4780A;
+  --red:#C0392B;
+  --green:#2E7D32;
+  --text:#1A1208;
+  --muted:#6B5E4F;
+  --border:rgba(44,31,14,0.12);
+  --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+}
+body{font-family:var(--font);background:var(--cream);color:var(--text);min-height:100vh;font-size:14px}
+.app{display:flex;flex-direction:column;min-height:100vh}
+
+/* TOPBAR */
+.topbar{background:var(--brown);color:#F5F0E8;display:flex;align-items:center;gap:1.5rem;padding:0 1.5rem;height:50px;flex-shrink:0;position:sticky;top:0;z-index:100}
+.logo{font-size:19px;font-weight:500;letter-spacing:-0.3px;white-space:nowrap}
+.logo em{font-style:italic;color:#D4A97A}
+.nav-links{display:flex;gap:0.25rem;flex:1}
+.nav-link{color:rgba(245,240,232,0.65);font-size:13px;padding:6px 12px;border-radius:6px;cursor:pointer;border:none;background:none;font-family:var(--font);transition:all 0.15s}
+.nav-link.active,.nav-link:hover{background:rgba(245,240,232,0.12);color:#F5F0E8}
+.user-area{display:flex;align-items:center;gap:10px;font-size:13px;color:rgba(245,240,232,0.7);white-space:nowrap}
+.avatar{width:30px;height:30px;border-radius:50%;background:var(--orange);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:500;color:#fff}
+
+/* LAYOUT */
+.layout{display:flex;flex:1}
+.sidebar{width:210px;background:var(--cream);border-right:0.5px solid var(--border);padding:1.5rem 0;flex-shrink:0}
+.sidebar-section{margin-bottom:1.5rem}
+.sidebar-label{font-size:10px;font-weight:600;color:var(--muted);letter-spacing:0.08em;padding:0 1.25rem;margin-bottom:6px;text-transform:uppercase}
+.sidebar-item{display:flex;align-items:center;gap:10px;padding:8px 1.25rem;font-size:13px;color:var(--muted);cursor:pointer;border:none;background:none;width:100%;text-align:left;font-family:var(--font);transition:all 0.12s}
+.sidebar-item:hover{background:var(--cream2);color:var(--text)}
+.sidebar-item.active{background:var(--brown);color:#F5F0E8}
+.sidebar-item svg{opacity:0.7;flex-shrink:0}
+.main{flex:1;padding:2rem;overflow-y:auto;max-width:100%}
+
+/* CARDS */
+.card{background:#fff;border:0.5px solid var(--border);border-radius:12px;padding:1.25rem;margin-bottom:1.25rem}
+.card-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem}
+.card-title{font-size:14px;font-weight:500}
+h2{font-size:18px;font-weight:500;margin-bottom:1.5rem}
+
+/* BUTTONS */
+.btn{background:#fff;border:0.5px solid rgba(44,31,14,0.25);border-radius:8px;padding:7px 14px;font-size:13px;cursor:pointer;font-family:var(--font);color:var(--text);transition:all 0.12s}
+.btn:hover{background:var(--cream2)}
+.btn-primary{background:var(--brown);color:#F5F0E8;border-color:var(--brown)}
+.btn-primary:hover{background:#3d2a10}
+
+/* STATS */
+.stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:1.5rem}
+.stat-card{background:#fff;border:0.5px solid var(--border);border-radius:12px;padding:1rem 1.25rem}
+.stat-num{font-size:28px;font-weight:500;line-height:1.1}
+.stat-num.red{color:var(--red)}
+.stat-num.amber{color:var(--amber)}
+.stat-num.green{color:var(--green)}
+.stat-num.muted{color:var(--muted)}
+.stat-label{font-size:12px;color:var(--muted);margin-top:4px}
+
+/* DOTS & BADGES */
+.dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+.dot.red{background:var(--red)}
+.dot.amber{background:var(--amber)}
+.dot.green{background:var(--green)}
+.dot.gray{background:#999}
+.tier-badge{font-size:11px;padding:2px 8px;border-radius:4px;font-weight:500;white-space:nowrap}
+.tier-badge.t1{background:#FAECE7;color:#993C1D}
+.tier-badge.t2{background:#FAEEDA;color:#854F0B}
+.tier-badge.t3{background:#E6F1FB;color:#185FA5}
+.tier-badge.t4{background:#EAF3DE;color:#3B6D11}
+.finding-badge{font-size:11px;padding:3px 8px;border-radius:4px;font-weight:500;white-space:nowrap}
+.finding-badge.required{background:#FAECE7;color:#993C1D}
+.finding-badge.recommended{background:#FAEEDA;color:#854F0B}
+.finding-badge.advisory{background:var(--cream2);color:var(--muted)}
+.status-pill{font-size:11px;padding:3px 10px;border-radius:12px;font-weight:500}
+.status-pill.active{background:var(--red);color:#fff}
+.status-pill.resolved{background:var(--cream2);color:var(--muted)}
+
+/* ASSET ROWS */
+.asset-row{display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:0.5px solid rgba(44,31,14,0.07);cursor:pointer;transition:all 0.1s}
+.asset-row:last-child{border-bottom:none}
+.asset-row:hover{background:var(--cream);margin:0 -1.25rem;padding:10px 1.25rem;border-radius:6px}
+.asset-name{font-size:13px;font-weight:500;flex:1}
+.asset-status{font-size:12px;color:var(--muted);min-width:130px;text-align:right}
+.asset-status.red{color:var(--red)}
+.asset-status.amber{color:var(--amber)}
+.asset-status.green{color:var(--green)}
+
+/* DASHBOARD GRID */
+.dash-grid{display:grid;grid-template-columns:1fr 300px;gap:1.5rem}
+@media(max-width:900px){.dash-grid{grid-template-columns:1fr}}
+
+/* PANEL CARDS */
+.panel-card{background:#fff;border:0.5px solid var(--border);border-radius:12px;padding:1.25rem;margin-bottom:12px}
+.panel-card.dark{background:var(--brown);color:#F5F0E8}
+.panel-label{font-size:10px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:var(--muted);margin-bottom:4px}
+.panel-label.light{color:rgba(245,240,232,0.6)}
+.panel-title{font-size:14px;font-weight:500;margin-bottom:4px}
+.panel-sub{font-size:12px;color:var(--muted)}
+.panel-sub.light{color:rgba(245,240,232,0.65)}
+.progress{height:4px;background:rgba(44,31,14,0.1);border-radius:2px;margin:8px 0}
+.progress-bar{height:4px;background:var(--orange);border-radius:2px;transition:width 0.4s ease}
+
+/* PAGE SYSTEM */
+.page{display:none}
+.page.active{display:block}
+
+/* BREADCRUMB */
+.breadcrumb{font-size:12px;color:var(--muted);margin-bottom:1.25rem;display:flex;align-items:center;gap:6px}
+.breadcrumb a{color:var(--orange);cursor:pointer;text-decoration:none}
+.breadcrumb a:hover{text-decoration:underline}
+
+/* DETAIL HEADER */
+.detail-header{background:var(--brown);color:#F5F0E8;border-radius:12px;padding:1.5rem;margin-bottom:1.5rem;position:relative}
+.detail-tag{font-size:11px;color:rgba(245,240,232,0.55);margin-bottom:6px}
+.detail-title{font-size:22px;font-weight:500}
+.detail-score{position:absolute;top:1.25rem;right:1.5rem;text-align:right}
+.detail-score-num{font-size:36px;font-weight:500;color:#D4A97A}
+.detail-score-label{font-size:11px;color:rgba(245,240,232,0.55)}
+
+/* FINDINGS */
+.finding-row{display:flex;align-items:flex-start;gap:10px;padding:10px 0;border-bottom:0.5px solid rgba(44,31,14,0.07)}
+.finding-row:last-child{border-bottom:none}
+.finding-dot{width:8px;height:8px;border-radius:50%;margin-top:4px;flex-shrink:0}
+.finding-text{font-size:13px;flex:1;line-height:1.4}
+
+/* CONTACTS */
+.contact-row{display:flex;align-items:center;gap:10px;padding:8px 0}
+.contact-avatar{width:32px;height:32px;border-radius:50%;background:var(--cream2);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:500;color:var(--muted);flex-shrink:0}
+.contact-name{font-size:13px;font-weight:500}
+.contact-role{font-size:11px;color:var(--muted)}
+.contact-role.urgent{color:var(--orange)}
+
+/* INCIDENT */
+.incident-header{background:var(--brown);color:#F5F0E8;border-radius:12px;padding:1.5rem;margin-bottom:1.5rem}
+.incident-badge{background:var(--red);color:#fff;font-size:11px;font-weight:500;padding:4px 12px;border-radius:20px;float:right}
+.incident-meta{font-size:11px;color:rgba(245,240,232,0.55);margin-bottom:4px}
+.incident-title{font-size:22px;font-weight:500;margin-bottom:4px}
+.incident-sub{font-size:12px;color:rgba(245,240,232,0.6)}
+.step-row{display:flex;gap:14px;margin-bottom:1.5rem}
+.step-num{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:500;flex-shrink:0;margin-top:2px}
+.step-num.complete{background:var(--brown);color:#F5F0E8;border:2px solid rgba(255,255,255,0.2)}
+.step-num.active-step{background:var(--orange);color:#fff}
+.step-num.pending{background:var(--cream2);color:var(--muted)}
+.step-content{flex:1}
+.step-title{font-size:14px;font-weight:500;margin-bottom:4px}
+.step-title.pending{color:var(--muted);font-weight:400}
+.step-desc{font-size:13px;color:var(--muted);line-height:1.5}
+.checklist{background:var(--cream);border-radius:8px;padding:1rem 1.25rem;margin-top:10px}
+.checklist-title{font-size:12px;font-weight:500;margin-bottom:10px;color:var(--muted)}
+.check-item{display:flex;align-items:center;gap:10px;margin-bottom:8px;font-size:13px;cursor:pointer}
+.checkbox{width:16px;height:16px;border-radius:3px;border:1.5px solid rgba(44,31,14,0.25);flex-shrink:0;display:flex;align-items:center;justify-content:center;transition:all 0.15s}
+.checkbox.checked{background:var(--brown);border-color:var(--brown);color:#fff;font-size:10px}
+.reg-box{background:#FFF9ED;border:1px solid #F0D080;border-radius:8px;padding:1rem 1.25rem;margin-bottom:1.25rem}
+.reg-box-title{font-size:12px;font-weight:600;color:#854F0B;margin-bottom:4px}
+.reg-box-text{font-size:12px;color:#6B5030;line-height:1.5}
+.affected-box{background:#fff;border:0.5px solid var(--border);border-radius:8px;padding:1rem 1.25rem;margin-bottom:1.25rem}
+.affected-title{font-size:12px;font-weight:500;margin-bottom:10px}
+.int-row{display:flex;align-items:center;gap:8px;margin-bottom:7px;font-size:13px}
+.int-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+
+/* QUESTIONNAIRE */
+.q-layout{display:grid;grid-template-columns:190px 1fr;min-height:380px}
+.q-sidebar{border-right:0.5px solid var(--border);padding:1.25rem 0}
+.q-section-item{display:flex;align-items:center;gap:10px;padding:9px 1.25rem;font-size:13px;color:var(--muted)}
+.q-section-dot{width:16px;height:16px;border-radius:50%;border:1.5px solid rgba(44,31,14,0.2);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:9px}
+.q-section-dot.complete{background:var(--green);border-color:var(--green);color:#fff}
+.q-section-dot.active-q{border-color:var(--orange)}
+.q-main{padding:1.5rem 2rem}
+.q-meta{font-size:12px;color:var(--orange);margin-bottom:8px;font-weight:500}
+.q-text{font-size:15px;margin-bottom:1.25rem;line-height:1.5}
+.q-option{display:flex;align-items:center;gap:12px;border:1px solid rgba(44,31,14,0.12);border-radius:8px;padding:12px 14px;margin-bottom:8px;cursor:pointer;font-size:13px;transition:all 0.12s}
+.q-option:hover{background:var(--cream)}
+.q-option.selected{border-color:var(--orange);background:#FFF7F2}
+.q-radio{width:16px;height:16px;border-radius:50%;border:1.5px solid rgba(44,31,14,0.25);flex-shrink:0;position:relative;transition:all 0.12s}
+.q-radio.selected{border-color:var(--orange);background:var(--orange)}
+.q-radio.selected::after{content:'';width:6px;height:6px;border-radius:50%;background:#fff;position:absolute;top:50%;left:50%;transform:translate(-50%,-50%)}
+.q-follow-up{background:#FFF7F2;border:1px solid var(--orange-light);border-radius:8px;padding:10px 14px;margin-top:8px;font-size:12px;color:var(--orange);display:flex;gap:8px;align-items:flex-start;line-height:1.5}
+.q-nav{display:flex;justify-content:space-between;margin-top:1.5rem}
+
+/* RISK TABLE */
+.risk-table{width:100%;border-collapse:collapse}
+.risk-table th{font-size:11px;font-weight:600;color:var(--muted);text-align:left;padding:8px 12px;border-bottom:0.5px solid var(--border);white-space:nowrap}
+.risk-table td{padding:10px 12px;font-size:13px;border-bottom:0.5px solid rgba(44,31,14,0.05);vertical-align:middle}
+.risk-table tr:hover td{background:var(--cream)}
+.risk-table tr.clickable{cursor:pointer}
+.score-pill{display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:500}
+.score-dot{width:8px;height:8px;border-radius:50%;flex-shrink:0}
+
+/* CERTIFICATIONS */
+.cert-status{font-size:12px}
+.cert-status.valid{color:var(--green)}
+.cert-status.expired{color:var(--red)}
+.cert-status.caveat{color:var(--amber)}
+.cert-status.missing{color:var(--red)}
+
+/* FILTER ROW */
+.filter-row{display:flex;gap:8px;margin-bottom:1rem;flex-wrap:wrap}
+select{font-size:13px;padding:6px 10px;border:0.5px solid rgba(44,31,14,0.2);border-radius:6px;background:#fff;font-family:var(--font);color:var(--text);cursor:pointer}
+select:focus{outline:none;border-color:var(--orange)}
+
+/* INCIDENT TRIGGER */
+.trigger-card{border:0.5px solid var(--orange);border-radius:12px;padding:1.25rem;margin-bottom:12px}
+.trigger-title{color:var(--orange);font-size:13px;font-weight:500;margin-bottom:6px}
+.trigger-desc{font-size:12px;color:var(--muted);margin-bottom:12px;line-height:1.5}
+
+/* SCROLLBAR */
+::-webkit-scrollbar{width:6px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:rgba(44,31,14,0.15);border-radius:3px}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- TOP BAR -->
+  <div class="topbar">
+    <div class="logo">Cly<em>ra</em></div>
+    <div class="nav-links">
+      <button class="nav-link" onclick="nav('dashboard')">Dashboard</button>
+      <button class="nav-link" onclick="nav('asset-register')">Vendors</button>
+      <button class="nav-link" onclick="nav('risk')">Risk</button>
+      <button class="nav-link" onclick="nav('incidents')">Incidents</button>
+    </div>
+    <div class="user-area">Acme Corp <div class="avatar">JH</div></div>
+  </div>
+
+  <div class="layout">
+
+    <!-- SIDEBAR -->
+    <div class="sidebar">
+      <div class="sidebar-section">
+        <div class="sidebar-label">Overview</div>
+        <button class="sidebar-item" onclick="nav('dashboard')">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="1" y="1" width="6" height="6" rx="1"/><rect x="9" y="1" width="6" height="6" rx="1"/><rect x="1" y="9" width="6" height="6" rx="1"/><rect x="9" y="9" width="6" height="6" rx="1"/></svg>
+          Dashboard
+        </button>
+        <button class="sidebar-item" onclick="nav('asset-register')">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M2 3h12M2 8h12M2 13h8"/></svg>
+          Asset register
+        </button>
+      </div>
+      <div class="sidebar-section">
+        <div class="sidebar-label">Assess</div>
+        <button class="sidebar-item" onclick="nav('questionnaire')">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="2" y="2" width="12" height="12" rx="2"/><path d="M5 6h6M5 9h4"/></svg>
+          Questionnaires
+        </button>
+        <button class="sidebar-item" onclick="nav('certifications')">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="7" r="5"/><path d="M5.5 12.5L8 14l2.5-1.5V10H5.5v2.5z"/></svg>
+          Certifications
+        </button>
+        <button class="sidebar-item" onclick="nav('risk')">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M1 13L5 5l4 4 3-6 3 8"/></svg>
+          Risk register
+        </button>
+      </div>
+      <div class="sidebar-section">
+        <div class="sidebar-label">Respond</div>
+        <button class="sidebar-item" onclick="nav('incidents')">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="8" cy="8" r="6"/><path d="M8 5v3.5M8 11v.5"/></svg>
+          Incidents
+        </button>
+      </div>
+    </div>
+
+    <!-- MAIN CONTENT -->
+    <div class="main">
+
+      <!-- DASHBOARD -->
+      <div id="page-dashboard" class="page">
+        <div class="stat-grid">
+          <div class="stat-card"><div class="stat-num">34</div><div class="stat-label">Total assets</div></div>
+          <div class="stat-card"><div class="stat-num red">4</div><div class="stat-label">Red — action needed</div></div>
+          <div class="stat-card"><div class="stat-num amber">9</div><div class="stat-label">Amber — in review</div></div>
+          <div class="stat-card"><div class="stat-num green">21</div><div class="stat-label">Green — assured</div></div>
+        </div>
+        <div class="dash-grid">
+          <div>
+            <div class="card">
+              <div class="card-header">
+                <span class="card-title">Asset register</span>
+                <button class="btn btn-primary" onclick="nav('asset-register')">+ Add asset</button>
+              </div>
+              <div class="asset-row" onclick="nav('asset-detail')"><div class="dot red"></div><div class="asset-name">Salesforce CRM</div><span class="tier-badge t1">Tier 1</span><div class="asset-status red">Questionnaire overdue</div></div>
+              <div class="asset-row" onclick="nav('asset-register')"><div class="dot red"></div><div class="asset-name">AWS Production</div><span class="tier-badge t1">Tier 1</span><div class="asset-status red">Cert expired</div></div>
+              <div class="asset-row" onclick="nav('asset-register')"><div class="dot amber"></div><div class="asset-name">Slack</div><span class="tier-badge t2">Tier 2</span><div class="asset-status amber">In assessment</div></div>
+              <div class="asset-row" onclick="nav('asset-register')"><div class="dot amber"></div><div class="asset-name">Hubspot</div><span class="tier-badge t2">Tier 2</span><div class="asset-status amber">Awaiting response</div></div>
+              <div class="asset-row" onclick="nav('asset-register')"><div class="dot green"></div><div class="asset-name">Zoom</div><span class="tier-badge t3">Tier 3</span><div class="asset-status green">Assured</div></div>
+              <div class="asset-row" onclick="nav('asset-register')"><div class="dot green"></div><div class="asset-name">Docusign</div><span class="tier-badge t4">Tier 4</span><div class="asset-status green">Assured</div></div>
+            </div>
+          </div>
+          <div>
+            <div class="panel-card">
+              <div class="panel-label">Active questionnaire</div>
+              <div class="panel-title">Hubspot — security</div>
+              <div class="progress"><div class="progress-bar" style="width:68%"></div></div>
+              <div class="panel-sub">Vendor response: 4 days left</div>
+            </div>
+            <div class="panel-card">
+              <div class="panel-label">AI complete</div>
+              <div class="panel-title">Slack assessment</div>
+              <div style="margin-top:8px">
+                <span class="finding-badge required">1 required</span>
+                <span class="finding-badge recommended">2 recommended</span>
+              </div>
+            </div>
+            <div class="panel-card dark">
+              <div class="panel-label light">Review due</div>
+              <div class="panel-title">Salesforce — annual</div>
+              <div class="panel-sub light">Due in 12 days</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ASSET REGISTER -->
+      <div id="page-asset-register" class="page">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.5rem">
+          <h2 style="margin-bottom:0">Asset register</h2>
+          <button class="btn btn-primary">+ Add asset</button>
+        </div>
+        <div class="card">
+          <div class="filter-row">
+            <select><option>All tiers</option><option>Tier 1</option><option>Tier 2</option><option>Tier 3</option><option>Tier 4</option></select>
+            <select><option>All statuses</option><option>Overdue</option><option>In assessment</option><option>Awaiting response</option><option>Assured</option></select>
+            <select><option>All types</option><option>SaaS</option><option>Cloud infra</option><option>Managed service</option></select>
+          </div>
+          <table class="risk-table">
+            <thead><tr><th>Asset</th><th>Type</th><th>Tier</th><th>Status</th><th>RAG</th><th>Review due</th></tr></thead>
+            <tbody>
+              <tr class="clickable" onclick="nav('asset-detail')">
+                <td><strong>Salesforce CRM</strong></td><td style="color:var(--muted)">SaaS</td><td><span class="tier-badge t1">Tier 1</span></td><td class="cert-status expired">Questionnaire overdue</td><td><span class="score-pill"><span class="score-dot" style="background:var(--amber)"></span>Amber</span></td><td style="font-size:12px;color:var(--muted)">12 days</td>
+              </tr>
+              <tr>
+                <td><strong>AWS Production</strong></td><td style="color:var(--muted)">Cloud infra</td><td><span class="tier-badge t1">Tier 1</span></td><td class="cert-status expired">Cert expired</td><td><span class="score-pill"><span class="score-dot" style="background:var(--red)"></span>Red</span></td><td style="font-size:12px;color:var(--muted)">30 days</td>
+              </tr>
+              <tr>
+                <td><strong>Slack</strong></td><td style="color:var(--muted)">SaaS</td><td><span class="tier-badge t2">Tier 2</span></td><td class="cert-status caveat">In assessment</td><td><span class="score-pill"><span class="score-dot" style="background:var(--amber)"></span>Amber</span></td><td style="font-size:12px;color:var(--muted)">90 days</td>
+              </tr>
+              <tr>
+                <td><strong>Hubspot</strong></td><td style="color:var(--muted)">SaaS</td><td><span class="tier-badge t2">Tier 2</span></td><td class="cert-status caveat">Awaiting response</td><td><span class="score-pill"><span class="score-dot" style="background:var(--amber)"></span>Amber</span></td><td style="font-size:12px;color:var(--muted)">45 days</td>
+              </tr>
+              <tr>
+                <td><strong>Zoom</strong></td><td style="color:var(--muted)">SaaS</td><td><span class="tier-badge t3">Tier 3</span></td><td class="cert-status valid">Assured</td><td><span class="score-pill"><span class="score-dot" style="background:var(--green)"></span>Green</span></td><td style="font-size:12px;color:var(--muted)">1.5 years</td>
+              </tr>
+              <tr>
+                <td><strong>Docusign</strong></td><td style="color:var(--muted)">SaaS</td><td><span class="tier-badge t4">Tier 4</span></td><td class="cert-status valid">Assured</td><td><span class="score-pill"><span class="score-dot" style="background:var(--green)"></span>Green</span></td><td style="font-size:12px;color:var(--muted)">2 years</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ASSET DETAIL -->
+      <div id="page-asset-detail" class="page">
+        <div class="breadcrumb"><a onclick="nav('asset-register')">Asset register</a> › Salesforce CRM</div>
+        <div class="detail-header">
+          <div class="detail-tag">SaaS · Tier 1 · Last assessed 14 Nov 2025</div>
+          <div class="detail-title">Salesforce CRM</div>
+          <div class="detail-score"><div class="detail-score-num">68</div><div class="detail-score-label">Risk score · Amber</div></div>
+        </div>
+        <div class="dash-grid">
+          <div>
+            <div class="card">
+              <div class="card-header"><span class="card-title">Findings</span><span class="finding-badge required">2 open</span></div>
+              <div class="finding-row"><div class="finding-dot" style="background:var(--red)"></div><div class="finding-text">MFA not enforced for admin users accessing via API</div><span class="finding-badge required">Required</span></div>
+              <div class="finding-row"><div class="finding-dot" style="background:var(--amber)"></div><div class="finding-text">Sub-processor list not disclosed in DPA — request update</div><span class="finding-badge recommended">Recommended</span></div>
+              <div class="finding-row"><div class="finding-dot" style="background:#aaa"></div><div class="finding-text">Consider requesting annual penetration test results</div><span class="finding-badge advisory">Advisory</span></div>
+            </div>
+            <div class="card">
+              <div class="card-header"><span class="card-title">Assurance</span></div>
+              <div class="finding-row"><div class="finding-dot" style="background:var(--green)"></div><div class="finding-text">Questionnaire — completed 14 Nov 2025</div></div>
+              <div class="finding-row"><div class="finding-dot" style="background:var(--amber)"></div><div class="finding-text">SOC 2 Type II — expires 3 Mar 2026</div></div>
+              <div class="finding-row"><div class="finding-dot" style="background:var(--red)"></div><div class="finding-text">ISO 27001 — not provided</div></div>
+            </div>
+          </div>
+          <div>
+            <div class="panel-card">
+              <div class="affected-title" style="font-size:13px;font-weight:500;margin-bottom:10px">Contacts</div>
+              <div class="contact-row"><div class="contact-avatar">JH</div><div><div class="contact-name">Jackson Hughes</div><div class="contact-role">Technical contact</div></div></div>
+              <div class="contact-row"><div class="contact-avatar">MK</div><div><div class="contact-name">Mark Kendall</div><div class="contact-role">Business contact</div></div></div>
+            </div>
+            <div class="panel-card">
+              <div style="font-size:13px;font-weight:500;margin-bottom:10px">Integrations</div>
+              <div class="int-row"><div class="int-dot" style="background:#999"></div>Hubspot — CRM sync via API</div>
+              <div class="int-row"><div class="int-dot" style="background:#999"></div>Slack — notification integration</div>
+              <div class="int-row"><div class="int-dot" style="background:#999"></div>SSO via Microsoft Entra ID</div>
+            </div>
+            <div class="trigger-card">
+              <div class="trigger-title">Incident response</div>
+              <div class="trigger-desc">Trigger an incident for this asset. Clyra will guide you through response, notification, and resolution.</div>
+              <button class="btn" style="width:100%;text-align:center" onclick="nav('incident')">Trigger incident response</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- INCIDENT -->
+      <div id="page-incident" class="page">
+        <div class="breadcrumb"><a onclick="nav('incidents')">Incidents</a> › Data breach — suspected</div>
+        <div class="incident-header">
+          <span class="incident-badge">Active incident</span>
+          <div class="incident-meta">Incident response · Salesforce CRM</div>
+          <div class="incident-title">Data breach — suspected</div>
+          <div class="incident-sub">Triggered 14:32 today · Salesforce CRM · Tier 1 asset</div>
+        </div>
+        <div class="dash-grid">
+          <div>
+            <div class="step-row">
+              <div class="step-num complete">1</div>
+              <div class="step-content">
+                <div class="step-title">Triage complete</div>
+                <div class="step-desc">Suspected unauthorised access to customer records. Scope: unknown. Data type: personal data including email and financial data.</div>
+              </div>
+            </div>
+            <div class="step-row">
+              <div class="step-num active-step">2</div>
+              <div class="step-content">
+                <div class="step-title">Containment — in progress</div>
+                <div class="step-desc">Complete the steps below. Clyra has identified three connected assets that may be affected.</div>
+                <div class="checklist">
+                  <div class="checklist-title">Immediate actions</div>
+                  <div class="check-item" onclick="toggleCheck('c1')"><div class="checkbox checked" id="c1">✓</div> Revoke all API tokens for Salesforce</div>
+                  <div class="check-item" onclick="toggleCheck('c2')"><div class="checkbox checked" id="c2">✓</div> Disable Hubspot CRM sync integration</div>
+                  <div class="check-item" onclick="toggleCheck('c3')"><div class="checkbox" id="c3"></div> Force re-authentication for all admin users</div>
+                  <div class="check-item" onclick="toggleCheck('c4')"><div class="checkbox" id="c4"></div> Preserve access logs — do not delete</div>
+                </div>
+              </div>
+            </div>
+            <div class="step-row">
+              <div class="step-num pending">3</div>
+              <div class="step-content"><div class="step-title pending">Assess impact</div></div>
+            </div>
+            <div class="step-row">
+              <div class="step-num pending">4</div>
+              <div class="step-content"><div class="step-title pending">Notifications</div></div>
+            </div>
+          </div>
+          <div>
+            <div class="reg-box">
+              <div class="reg-box-title">Regulatory notification window</div>
+              <div class="reg-box-text">Under UK GDPR Article 33, you have 72 hours from becoming aware of this breach to notify the ICO if it is likely to result in a risk to individuals. Clock started at 14:32 today.</div>
+            </div>
+            <div class="affected-box">
+              <div class="affected-title">Affected integrations</div>
+              <div class="int-row"><div class="int-dot" style="background:var(--red)"></div>Hubspot — CRM sync disabled</div>
+              <div class="int-row"><div class="int-dot" style="background:var(--amber)"></div>Slack — notification integration — monitor</div>
+              <div class="int-row"><div class="int-dot" style="background:var(--green)"></div>Docusign — no data shared — low risk</div>
+            </div>
+            <div class="affected-box">
+              <div class="affected-title">Escalation contacts</div>
+              <div class="contact-row"><div class="contact-avatar">MK</div><div><div class="contact-name">Mark Kendall</div><div class="contact-role urgent">Business contact · notify now</div></div></div>
+              <div class="contact-row"><div class="contact-avatar">JH</div><div><div class="contact-name">Jackson Hughes</div><div class="contact-role">Technical contact · already notified</div></div></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- QUESTIONNAIRE -->
+      <div id="page-questionnaire" class="page">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.5rem">
+          <h2 style="margin-bottom:0">Questionnaires</h2>
+          <button class="btn btn-primary">+ Send questionnaire</button>
+        </div>
+        <div class="card">
+          <div class="q-layout">
+            <div class="q-sidebar">
+              <div class="q-section-item"><div class="q-section-dot complete">✓</div>Access control</div>
+              <div class="q-section-item"><div class="q-section-dot complete">✓</div>Information security</div>
+              <div class="q-section-item" style="color:var(--text)"><div class="q-section-dot active-q"></div>Data protection</div>
+              <div class="q-section-item"><div class="q-section-dot"></div>Incident management</div>
+              <div class="q-section-item"><div class="q-section-dot"></div>Third-party mgmt</div>
+              <div class="q-section-item"><div class="q-section-dot"></div>Vulnerability mgmt</div>
+              <div class="q-section-item"><div class="q-section-dot"></div>Compliance</div>
+            </div>
+            <div class="q-main">
+              <div class="q-meta">Question 13 of 42 · Data protection</div>
+              <div class="q-text">Which legal bases do you rely on for processing personal data provided by your clients?</div>
+              <div class="q-option" onclick="selectQ(0,this)"><div class="q-radio" id="qr0"></div>Contract performance only</div>
+              <div class="q-option" onclick="selectQ(1,this)"><div class="q-radio" id="qr1"></div>Contract + legitimate interests</div>
+              <div class="q-option selected" onclick="selectQ(2,this)"><div class="q-radio selected" id="qr2"></div>Contract + consent where required</div>
+              <div class="q-option" onclick="selectQ(3,this)"><div class="q-radio" id="qr3"></div>Other / varies by jurisdiction</div>
+              <div class="q-follow-up" id="q-followup">
+                <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" style="margin-top:1px;flex-shrink:0"><circle cx="8" cy="8" r="6"/><path d="M8 5v3.5M8 11v.5"/></svg>
+                As a Tier 1 vendor with access to special category data, Clyra will ask a follow-up question about your consent management process.
+              </div>
+              <div class="q-nav">
+                <button class="btn">← Previous</button>
+                <button class="btn btn-primary">Next →</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- RISK REGISTER -->
+      <div id="page-risk" class="page">
+        <h2>Risk register</h2>
+        <div class="stat-grid">
+          <div class="stat-card"><div class="stat-num red">4</div><div class="stat-label">Red — action needed</div></div>
+          <div class="stat-card"><div class="stat-num amber">9</div><div class="stat-label">Amber — in review</div></div>
+          <div class="stat-card"><div class="stat-num green">21</div><div class="stat-label">Green — assured</div></div>
+          <div class="stat-card"><div class="stat-num muted">3</div><div class="stat-label">Not yet assessed</div></div>
+        </div>
+        <div class="card">
+          <table class="risk-table">
+            <thead><tr><th>Asset</th><th>Tier</th><th>Security</th><th>Compliance</th><th>Operational</th><th>Score</th><th>RAG</th></tr></thead>
+            <tbody>
+              <tr class="clickable" onclick="nav('asset-detail')">
+                <td><strong>Salesforce CRM</strong></td><td><span class="tier-badge t1">Tier 1</span></td><td style="color:var(--muted);font-size:12px">Medium</td><td style="color:var(--muted);font-size:12px">High</td><td style="color:var(--muted);font-size:12px">High</td><td><strong>68</strong></td><td><span class="score-pill"><span class="score-dot" style="background:var(--amber)"></span>Amber</span></td>
+              </tr>
+              <tr>
+                <td><strong>AWS Production</strong></td><td><span class="tier-badge t1">Tier 1</span></td><td style="color:var(--muted);font-size:12px">High</td><td style="color:var(--muted);font-size:12px">Medium</td><td style="color:var(--muted);font-size:12px">Critical</td><td><strong>82</strong></td><td><span class="score-pill"><span class="score-dot" style="background:var(--red)"></span>Red</span></td>
+              </tr>
+              <tr>
+                <td><strong>Slack</strong></td><td><span class="tier-badge t2">Tier 2</span></td><td style="color:var(--muted);font-size:12px">Low</td><td style="color:var(--muted);font-size:12px">Medium</td><td style="color:var(--muted);font-size:12px">Medium</td><td><strong>54</strong></td><td><span class="score-pill"><span class="score-dot" style="background:var(--amber)"></span>Amber</span></td>
+              </tr>
+              <tr>
+                <td><strong>Hubspot</strong></td><td><span class="tier-badge t2">Tier 2</span></td><td style="color:var(--muted);font-size:12px">Low</td><td style="color:var(--muted);font-size:12px">Medium</td><td style="color:var(--muted);font-size:12px">Low</td><td><strong>42</strong></td><td><span class="score-pill"><span class="score-dot" style="background:var(--amber)"></span>Amber</span></td>
+              </tr>
+              <tr>
+                <td><strong>Zoom</strong></td><td><span class="tier-badge t3">Tier 3</span></td><td style="color:var(--muted);font-size:12px">Low</td><td style="color:var(--muted);font-size:12px">Low</td><td style="color:var(--muted);font-size:12px">Low</td><td><strong>22</strong></td><td><span class="score-pill"><span class="score-dot" style="background:var(--green)"></span>Green</span></td>
+              </tr>
+              <tr>
+                <td><strong>Docusign</strong></td><td><span class="tier-badge t4">Tier 4</span></td><td style="color:var(--muted);font-size:12px">Low</td><td style="color:var(--muted);font-size:12px">Low</td><td style="color:var(--muted);font-size:12px">Low</td><td><strong>15</strong></td><td><span class="score-pill"><span class="score-dot" style="background:var(--green)"></span>Green</span></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- CERTIFICATIONS -->
+      <div id="page-certifications" class="page">
+        <h2>Certifications</h2>
+        <div class="card">
+          <table class="risk-table">
+            <thead><tr><th>Asset</th><th>Certification</th><th>Status</th><th>Expiry</th><th>Scope coverage</th><th>Sufficiency</th></tr></thead>
+            <tbody>
+              <tr><td><strong>Salesforce CRM</strong></td><td>SOC 2 Type II</td><td class="cert-status caveat">Valid with caveats</td><td style="font-size:12px;color:var(--muted)">3 Mar 2026</td><td style="font-size:12px;color:var(--muted)">Partial</td><td><span class="score-pill"><span class="score-dot" style="background:var(--amber)"></span>Partial</span></td></tr>
+              <tr><td><strong>Salesforce CRM</strong></td><td>ISO 27001</td><td class="cert-status missing">Not provided</td><td style="font-size:12px;color:var(--muted)">—</td><td style="font-size:12px;color:var(--muted)">—</td><td><span class="score-pill"><span class="score-dot" style="background:var(--red)"></span>Insufficient</span></td></tr>
+              <tr><td><strong>AWS Production</strong></td><td>SOC 2 Type II</td><td class="cert-status expired">Expired</td><td style="font-size:12px;color:var(--red)">Jan 2025</td><td style="font-size:12px;color:var(--muted)">—</td><td><span class="score-pill"><span class="score-dot" style="background:var(--red)"></span>Expired</span></td></tr>
+              <tr><td><strong>Zoom</strong></td><td>SOC 2 Type II</td><td class="cert-status valid">Valid</td><td style="font-size:12px;color:var(--muted)">Nov 2025</td><td style="font-size:12px;color:var(--muted)">Full</td><td><span class="score-pill"><span class="score-dot" style="background:var(--green)"></span>Sufficient</span></td></tr>
+              <tr><td><strong>Docusign</strong></td><td>Cyber Essentials Plus</td><td class="cert-status valid">Valid</td><td style="font-size:12px;color:var(--muted)">Aug 2026</td><td style="font-size:12px;color:var(--muted)">Full</td><td><span class="score-pill"><span class="score-dot" style="background:var(--green)"></span>Sufficient</span></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- INCIDENTS LIST -->
+      <div id="page-incidents" class="page">
+        <h2>Incidents</h2>
+        <div class="card">
+          <div class="asset-row" onclick="nav('incident')">
+            <div class="dot red"></div>
+            <div style="flex:1">
+              <div class="asset-name">Data breach — suspected</div>
+              <div style="font-size:11px;color:var(--muted)">Salesforce CRM · Triggered 14:32 today</div>
+            </div>
+            <span class="status-pill active">Active</span>
+          </div>
+          <div class="asset-row">
+            <div class="dot amber"></div>
+            <div style="flex:1">
+              <div class="asset-name">Phishing attempt — staff credentials</div>
+              <div style="font-size:11px;color:var(--muted)">Microsoft 365 · Resolved 12 Apr 2025</div>
+            </div>
+            <span class="status-pill resolved">Resolved</span>
+          </div>
+          <div class="asset-row">
+            <div class="dot green"></div>
+            <div style="flex:1">
+              <div class="asset-name">API rate limit anomaly</div>
+              <div style="font-size:11px;color:var(--muted)">AWS Production · Resolved 3 Feb 2025</div>
+            </div>
+            <span class="status-pill resolved">Resolved</span>
+          </div>
+        </div>
+      </div>
+
+    </div><!-- /main -->
+  </div><!-- /layout -->
+</div><!-- /app -->
+
+<script>
+function nav(page) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  const el = document.getElementById('page-' + page);
+  if (el) el.classList.add('active');
+
+  const topMap = { 'dashboard':'Dashboard','asset-register':'Vendors','asset-detail':'Vendors','risk':'Risk','incidents':'Incidents','incident':'Incidents','questionnaire':'Vendors','certifications':'Vendors' };
+  document.querySelectorAll('.nav-link').forEach(l => {
+    l.classList.toggle('active', l.textContent.trim() === (topMap[page] || ''));
+  });
+
+  const sideMap = { 'dashboard':'Dashboard','asset-register':'Asset register','asset-detail':'Asset register','questionnaire':'Questionnaires','certifications':'Certifications','risk':'Risk register','incidents':'Incidents','incident':'Incidents' };
+  document.querySelectorAll('.sidebar-item').forEach(l => {
+    l.classList.toggle('active', l.textContent.trim() === (sideMap[page] || ''));
+  });
+
+  window.scrollTo(0,0);
+}
+
+function toggleCheck(id) {
+  const el = document.getElementById(id);
+  const isChecked = el.classList.contains('checked');
+  el.classList.toggle('checked', !isChecked);
+  el.textContent = isChecked ? '' : '✓';
+}
+
+function selectQ(idx) {
+  document.querySelectorAll('.q-option').forEach((o,i) => {
+    o.classList.toggle('selected', i === idx);
+    const r = document.getElementById('qr' + i);
+    if (r) r.classList.toggle('selected', i === idx);
+  });
+  const fu = document.getElementById('q-followup');
+  if (fu) fu.style.display = idx === 2 ? 'flex' : 'none';
+}
+
+nav('dashboard');
+</script>
+</body>
+</html>

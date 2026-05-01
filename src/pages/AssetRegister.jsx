@@ -3,6 +3,13 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import AddAssetModal from '../components/AddAssetModal'
 
+const qStatusColor = {
+  'not sent': 'var(--muted)',
+  'sent': 'var(--amber)',
+  'submitted': '#185FA5',
+  'evaluated': 'var(--green)',
+}
+
 export default function AssetRegister() {
   const navigate = useNavigate()
   const [assets, setAssets] = useState([])
@@ -12,9 +19,7 @@ export default function AssetRegister() {
   const [statusFilter, setStatusFilter] = useState('all')
   const [typeFilter, setTypeFilter] = useState('all')
 
-  useEffect(() => {
-    fetchAssets()
-  }, [])
+  useEffect(() => { fetchAssets() }, [])
 
   async function fetchAssets() {
     const { data, error } = await supabase.from('assets').select('*').order('tier')
@@ -26,11 +31,11 @@ export default function AssetRegister() {
     if (tierFilter !== 'all' && a.tier !== parseInt(tierFilter)) return false
     if (typeFilter !== 'all' && a.type !== typeFilter) return false
     if (statusFilter !== 'all') {
-      const s = (a.status || '').toLowerCase()
-      if (statusFilter === 'overdue' && !s.includes('overdue') && !s.includes('expired')) return false
-      if (statusFilter === 'assessment' && !s.includes('assessment')) return false
-      if (statusFilter === 'awaiting' && !s.includes('awaiting')) return false
-      if (statusFilter === 'assured' && !s.includes('assured')) return false
+      const s = (a.questionnaire_status || '').toLowerCase()
+      if (statusFilter === 'not sent' && s !== 'not sent' && s !== '') return false
+      if (statusFilter === 'sent' && s !== 'sent') return false
+      if (statusFilter === 'submitted' && s !== 'submitted') return false
+      if (statusFilter === 'evaluated' && s !== 'evaluated') return false
     }
     return true
   })
@@ -39,15 +44,7 @@ export default function AssetRegister() {
 
   return (
     <>
-      {showAdd && (
-        <AddAssetModal
-          onClose={() => setShowAdd(false)}
-          onAdded={(asset) => {
-            setAssets(prev => [...prev, asset].sort((a, b) => a.tier - b.tier))
-            setShowAdd(false)
-          }}
-        />
-      )}
+      {showAdd && <AddAssetModal onClose={() => setShowAdd(false)} />}
 
       <div className="page-header">
         <h2>Asset register</h2>
@@ -58,17 +55,17 @@ export default function AssetRegister() {
         <div className="filter-row">
           <select value={tierFilter} onChange={e => setTierFilter(e.target.value)}>
             <option value="all">All tiers</option>
-            <option value="1">Tier 1</option>
-            <option value="2">Tier 2</option>
-            <option value="3">Tier 3</option>
-            <option value="4">Tier 4</option>
+            <option value="1">Tier 1 — Critical</option>
+            <option value="2">Tier 2 — High</option>
+            <option value="3">Tier 3 — Medium</option>
+            <option value="4">Tier 4 — Low</option>
           </select>
           <select value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
             <option value="all">All statuses</option>
-            <option value="overdue">Overdue / Expired</option>
-            <option value="assessment">In assessment</option>
-            <option value="awaiting">Awaiting response</option>
-            <option value="assured">Assured</option>
+            <option value="not sent">Not sent</option>
+            <option value="sent">Sent</option>
+            <option value="submitted">Submitted</option>
+            <option value="evaluated">Evaluated</option>
           </select>
           <select value={typeFilter} onChange={e => setTypeFilter(e.target.value)}>
             <option value="all">All types</option>
@@ -81,24 +78,29 @@ export default function AssetRegister() {
         </div>
         <table className="data-table">
           <thead>
-            <tr>
-              <th>Asset</th><th>Type</th><th>Tier</th><th>Status</th><th>RAG</th><th>Review due</th>
-            </tr>
+            <tr><th>Asset</th><th>Type</th><th>Tier</th><th>Questionnaire</th><th>RAG</th><th>Review due</th></tr>
           </thead>
           <tbody>
             {filtered.map(asset => (
               <tr key={asset.id} className="clickable" onClick={() => navigate(`/assets/${asset.id}`)}>
-                <td><strong>{asset.name}</strong></td>
+                <td>
+                  <strong>{asset.name}</strong>
+                  {asset.company_name && <div style={{ fontSize: 11, color: 'var(--muted)' }}>{asset.company_name}</div>}
+                </td>
                 <td style={{ color: 'var(--muted)' }}>{asset.type}</td>
                 <td><span className={`tier-badge t${asset.tier}`}>Tier {asset.tier}</span></td>
-                <td className={`cert-status ${asset.rag === 'red' ? 'expired' : asset.rag === 'amber' ? 'caveat' : 'valid'}`}>{asset.status}</td>
+                <td style={{ fontSize: 12, color: qStatusColor[asset.questionnaire_status] || 'var(--muted)', textTransform: 'capitalize' }}>
+                  {asset.questionnaire_status || 'not sent'}
+                </td>
                 <td>
                   <span className="score-pill">
                     <span className={`score-dot ${asset.rag}`}></span>
-                    {asset.rag.charAt(0).toUpperCase() + asset.rag.slice(1)}
+                    {asset.rag ? asset.rag.charAt(0).toUpperCase() + asset.rag.slice(1) : '—'}
                   </span>
                 </td>
-                <td style={{ fontSize: 12, color: 'var(--muted)' }}>{asset.review_due}</td>
+                <td style={{ fontSize: 12, color: 'var(--muted)' }}>
+                  {asset.review_due_date ? new Date(asset.review_due_date).toLocaleDateString() : asset.review_due || '—'}
+                </td>
               </tr>
             ))}
           </tbody>

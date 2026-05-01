@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 
 const steps = ['Risk profile', 'Tier assignment', 'Review & send']
@@ -16,10 +16,17 @@ const profileFields = [
 
 export default function NewQuestionnaire() {
   const navigate = useNavigate()
+  const location = useLocation()
+  const prefill = location.state?.prefill || {}
+
   const [step, setStep] = useState(0)
-  const [assetName, setAssetName] = useState('')
-  const [vendorEmail, setVendorEmail] = useState('')
-  const [vendorName, setVendorName] = useState('')
+  const [assetName, setAssetName] = useState(prefill.assetName || '')
+  const [assetType, setAssetType] = useState(prefill.assetType || 'SaaS')
+  const [companyName, setCompanyName] = useState(prefill.companyName || '')
+  const [vendorEmail, setVendorEmail] = useState(prefill.contactEmail || '')
+  const [vendorName, setVendorName] = useState(prefill.contactName || '')
+  const [contractRef, setContractRef] = useState('')
+  const [integrationNotes, setIntegrationNotes] = useState('')
   const [profile, setProfile] = useState({
     data_sensitivity: 'Personal data',
     network_access: 'Internet-only',
@@ -48,16 +55,15 @@ export default function NewQuestionnaire() {
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
       setTierResult(data)
-
       setLoadingMsg('Hold tight — generating tailored questions...')
       const res2 = await fetch('/api/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ assetName, tier: data.tier, profile }),
       })
-      const questions = await res2.json()
-      if (!res2.ok) throw new Error(questions.error)
-      setQuestions(questions)
+      const qs = await res2.json()
+      if (!res2.ok) throw new Error(qs.error)
+      setQuestions(qs)
       setStep(1)
     } catch (err) {
       setError(err.message)
@@ -69,11 +75,35 @@ export default function NewQuestionnaire() {
   const saveAndSend = async () => {
     setLoading(true)
     setError('')
-    setLoadingMsg('Saving questionnaire...')
+    setLoadingMsg('Saving asset and questionnaire...')
     try {
+      const { data: { user } } = await supabase.auth.getUser()
+      const assetId = assetName.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-') + '-' + Date.now()
+
+      const { error: assetError } = await supabase.from('assets').insert([{
+        id: assetId,
+        name: assetName,
+        type: assetType,
+        tier: tierResult.tier,
+        rag: 'amber',
+        score: 50,
+        status: 'In assessment',
+        last_assessed: 'Pending',
+        company_name: companyName,
+        contact_name: vendorName,
+        contact_email: vendorEmail,
+        contract_reference: contractRef,
+        integration_notes: integrationNotes,
+        questionnaire_status: 'sent',
+        certification_status: 'not requested',
+        added_by: user?.email || 'unknown',
+      }])
+      if (assetError) throw new Error(assetError.message)
+
       const { data: qData, error: qError } = await supabase
         .from('questionnaires')
         .insert([{
+          asset_id: assetId,
           asset_name: assetName,
           tier: tierResult.tier,
           tier_justification: tierResult.justification,
@@ -84,7 +114,6 @@ export default function NewQuestionnaire() {
         }])
         .select()
         .single()
-
       if (qError) throw new Error(qError.message)
 
       const questionsToInsert = questions.map(q => ({
@@ -95,14 +124,10 @@ export default function NewQuestionnaire() {
         order_num: q.order_num,
         follow_up_trigger: q.follow_up_trigger || '',
       }))
-
-      const { error: qqError } = await supabase
-        .from('questionnaire_questions')
-        .insert(questionsToInsert)
-
+      const { error: qqError } = await supabase.from('questionnaire_questions').insert(questionsToInsert)
       if (qqError) throw new Error(qqError.message)
 
-      navigate(`/questionnaires/${qData.id}`)
+      navigate(`/assets/${assetId}`)
     } catch (err) {
       setError(err.message)
     }
@@ -112,23 +137,19 @@ export default function NewQuestionnaire() {
 
   const tierColors = { 1: 'var(--red)', 2: 'var(--amber)', 3: '#185FA5', 4: 'var(--green)' }
   const tierBg = { 1: '#FAECE7', 2: '#FAEEDA', 3: '#E6F1FB', 4: '#EAF3DE' }
-  const domainColors = {}
   const domains = [...new Set(questions.map(q => q.domain))]
 
   return (
     <div style={{ maxWidth: 720, margin: '0 auto' }}>
       <div style={{ marginBottom: '2rem' }}>
-        <button className="btn" onClick={() => navigate('/questionnaires')} style={{ marginBottom: 16 }}>← Back</button>
-        <h2 style={{ fontSize: 18, fontWeight: 500, marginBottom: 8 }}>New questionnaire</h2>
+        <button className="btn" onClick={() => navigate(-1)} style={{ marginBottom: 16 }}>← Back</button>
+        <h2 style={{ fontSize: 18, fontWeight: 500, marginBottom: 12 }}>New questionnaire</h2>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           {steps.map((s, i) => (
             <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <div style={{
-                width: 24, height: 24, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                fontSize: 11, fontWeight: 500,
-                background: i < step ? 'var(--brown)' : i === step ? 'var(--orange)' : 'var(--cream2)',
-                color: i <= step ? '#fff' : 'var(--muted)',
-              }}>{i < step ? '✓' : i + 1}</div>
+              <div style={{ width: 24, height: 24, borderRadius: '50%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 500, background: i < step ? 'var(--brown)' : i === step ? 'var(--orange)' : 'var(--cream2)', color: i <= step ? '#fff' : 'var(--muted)' }}>
+                {i < step ? '✓' : i + 1}
+              </div>
               <span style={{ fontSize: 13, color: i === step ? 'var(--text)' : 'var(--muted)', fontWeight: i === step ? 500 : 400 }}>{s}</span>
               {i < steps.length - 1 && <div style={{ width: 24, height: 1, background: 'var(--border)' }} />}
             </div>
@@ -140,22 +161,43 @@ export default function NewQuestionnaire() {
         <div className="card">
           <div className="card-header"><span className="card-title">Vendor risk profile</span></div>
 
-          <div style={{ marginBottom: 16 }}>
-            <label style={labelStyle}>Vendor / asset name *</label>
-            <input value={assetName} onChange={e => setAssetName(e.target.value)}
-              placeholder="e.g. Salesforce CRM" style={inputStyle} required />
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
+            <div>
+              <label style={labelStyle}>Asset name *</label>
+              <input value={assetName} onChange={e => setAssetName(e.target.value)} placeholder="e.g. Salesforce CRM" style={inputStyle} />
+            </div>
+            <div>
+              <label style={labelStyle}>Asset type *</label>
+              <select value={assetType} onChange={e => setAssetType(e.target.value)} style={inputStyle}>
+                <option>SaaS</option><option>Cloud infra</option><option>Managed service</option>
+                <option>Physical asset</option><option>Internal tool</option>
+              </select>
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 16 }}>
+            <div>
+              <label style={labelStyle}>Company name</label>
+              <input value={companyName} onChange={e => setCompanyName(e.target.value)} placeholder="Vendor Inc." style={inputStyle} />
+            </div>
+            <div>
+              <label style={labelStyle}>Contact name</label>
+              <input value={vendorName} onChange={e => setVendorName(e.target.value)} placeholder="Jane Smith" style={inputStyle} />
+            </div>
+            <div>
+              <label style={labelStyle}>Contact email</label>
+              <input type="email" value={vendorEmail} onChange={e => setVendorEmail(e.target.value)} placeholder="jane@vendor.com" style={inputStyle} />
+            </div>
           </div>
 
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
             <div>
-              <label style={labelStyle}>Vendor contact name</label>
-              <input value={vendorName} onChange={e => setVendorName(e.target.value)}
-                placeholder="Jane Smith" style={inputStyle} />
+              <label style={labelStyle}>Contract reference</label>
+              <input value={contractRef} onChange={e => setContractRef(e.target.value)} placeholder="e.g. MSA-2024-001 or doc link" style={inputStyle} />
             </div>
             <div>
-              <label style={labelStyle}>Vendor email</label>
-              <input type="email" value={vendorEmail} onChange={e => setVendorEmail(e.target.value)}
-                placeholder="security@vendor.com" style={inputStyle} />
+              <label style={labelStyle}>Integration notes</label>
+              <input value={integrationNotes} onChange={e => setIntegrationNotes(e.target.value)} placeholder="What does this asset connect to?" style={inputStyle} />
             </div>
           </div>
 
@@ -165,9 +207,7 @@ export default function NewQuestionnaire() {
               {profileFields.map(field => (
                 <div key={field.key}>
                   <label style={labelStyle}>{field.label}</label>
-                  <select value={profile[field.key]}
-                    onChange={e => setProfile(prev => ({ ...prev, [field.key]: e.target.value }))}
-                    style={inputStyle}>
+                  <select value={profile[field.key]} onChange={e => setProfile(prev => ({ ...prev, [field.key]: e.target.value }))} style={inputStyle}>
                     {field.options.map(opt => <option key={opt}>{opt}</option>)}
                   </select>
                 </div>
@@ -177,16 +217,11 @@ export default function NewQuestionnaire() {
 
           {error && <div style={errorStyle}>{error}</div>}
 
-          <button className="btn btn-primary" style={{ width: '100%', opacity: loading ? 1 : 1, position: 'relative' }}
-            onClick={runProfile} disabled={loading || !assetName}>
+          <button className="btn btn-primary" style={{ width: '100%' }} onClick={runProfile} disabled={loading || !assetName}>
             {loading ? (
               <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
-                <span style={{
-                  width: 14, height: 14, border: '2px solid rgba(245,240,232,0.3)',
-                  borderTopColor: '#F5F0E8', borderRadius: '50%',
-                  animation: 'spin 0.8s linear infinite', display: 'inline-block', flexShrink: 0,
-                }} />
-                {loadingMsg || 'Working...'}
+                <span style={{ width: 14, height: 14, border: '2px solid rgba(245,240,232,0.3)', borderTopColor: '#F5F0E8', borderRadius: '50%', animation: 'spin 0.8s linear infinite', display: 'inline-block' }} />
+                {loadingMsg}
               </span>
             ) : 'Analyse risk profile →'}
           </button>
@@ -198,16 +233,9 @@ export default function NewQuestionnaire() {
         <>
           <div className="card">
             <div style={{ display: 'flex', alignItems: 'flex-start', gap: 16 }}>
-              <div style={{
-                padding: '10px 16px', borderRadius: 8, textAlign: 'center', flexShrink: 0,
-                background: tierBg[tierResult.tier],
-              }}>
-                <div style={{ fontSize: 22, fontWeight: 500, color: tierColors[tierResult.tier] }}>
-                  Tier {tierResult.tier}
-                </div>
-                <div style={{ fontSize: 11, color: tierColors[tierResult.tier], fontWeight: 500 }}>
-                  {tierResult.label}
-                </div>
+              <div style={{ padding: '10px 16px', borderRadius: 8, textAlign: 'center', flexShrink: 0, background: tierBg[tierResult.tier] }}>
+                <div style={{ fontSize: 22, fontWeight: 500, color: tierColors[tierResult.tier] }}>Tier {tierResult.tier}</div>
+                <div style={{ fontSize: 11, color: tierColors[tierResult.tier], fontWeight: 500 }}>{tierResult.label}</div>
               </div>
               <div>
                 <div style={{ fontSize: 14, fontWeight: 500, marginBottom: 6 }}>AI tier assignment</div>
@@ -219,15 +247,11 @@ export default function NewQuestionnaire() {
           <div className="card">
             <div className="card-header">
               <span className="card-title">Generated questionnaire</span>
-              <span style={{ fontSize: 12, color: 'var(--muted)' }}>{questions.length} questions across {domains.length} domains</span>
+              <span style={{ fontSize: 12, color: 'var(--muted)' }}>{questions.length} questions · {domains.length} domains</span>
             </div>
             {domains.map(domain => (
               <div key={domain} style={{ marginBottom: 16 }}>
-                <div style={{
-                  fontSize: 11, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase',
-                  letterSpacing: '0.06em', marginBottom: 8, paddingBottom: 6,
-                  borderBottom: '0.5px solid var(--border)',
-                }}>
+                <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 8, paddingBottom: 6, borderBottom: '0.5px solid var(--border)' }}>
                   {domain}
                 </div>
                 {questions.filter(q => q.domain === domain).map((q, i) => (
@@ -235,11 +259,7 @@ export default function NewQuestionnaire() {
                     <div style={{ color: 'var(--muted)', flexShrink: 0, width: 20, paddingTop: 1 }}>{q.order_num}.</div>
                     <div style={{ flex: 1 }}>
                       {q.question}
-                      {q.follow_up_trigger && (
-                        <div style={{ fontSize: 11, color: 'var(--orange)', marginTop: 3 }}>
-                          ↳ Follow-up: {q.follow_up_trigger}
-                        </div>
-                      )}
+                      {q.follow_up_trigger && <div style={{ fontSize: 11, color: 'var(--orange)', marginTop: 3 }}>↳ {q.follow_up_trigger}</div>}
                     </div>
                     <div style={{ fontSize: 11, color: 'var(--muted)', flexShrink: 0, paddingTop: 2 }}>{q.control_ref}</div>
                   </div>
@@ -250,26 +270,21 @@ export default function NewQuestionnaire() {
 
           <div className="card">
             <div className="card-header"><span className="card-title">Review & send</span></div>
-            <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 16, lineHeight: 1.6 }}>
-              The vendor will receive a secure link to complete this questionnaire. Their responses will be automatically evaluated by AI on submission.
-            </div>
             <div style={{ background: 'var(--cream)', borderRadius: 8, padding: '12px 14px', marginBottom: 16, fontSize: 13 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                <span style={{ color: 'var(--muted)' }}>Vendor</span>
-                <span>{vendorName || 'Not specified'}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                <span style={{ color: 'var(--muted)' }}>Email</span>
-                <span>{vendorEmail || 'Not specified'}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                <span style={{ color: 'var(--muted)' }}>Questions</span>
-                <span>{questions.length}</span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <span style={{ color: 'var(--muted)' }}>Link expires</span>
-                <span>14 days</span>
-              </div>
+              {[
+                ['Asset', assetName],
+                ['Type', assetType],
+                ['Vendor contact', vendorName || '—'],
+                ['Email', vendorEmail || '—'],
+                ['Tier', `Tier ${tierResult.tier} — ${tierResult.label}`],
+                ['Questions', questions.length],
+                ['Link expires', '14 days'],
+              ].map(([label, value]) => (
+                <div key={label} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                  <span style={{ color: 'var(--muted)' }}>{label}</span>
+                  <span>{value}</span>
+                </div>
+              ))}
             </div>
 
             {error && <div style={errorStyle}>{error}</div>}
@@ -277,7 +292,12 @@ export default function NewQuestionnaire() {
             <div style={{ display: 'flex', gap: 10 }}>
               <button className="btn" onClick={() => setStep(0)} style={{ flex: 1 }}>← Edit profile</button>
               <button className="btn btn-primary" onClick={saveAndSend} disabled={loading} style={{ flex: 2 }}>
-                {loading ? loadingMsg || 'Saving...' : 'Save questionnaire →'}
+                {loading ? (
+                  <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
+                    <span style={{ width: 14, height: 14, border: '2px solid rgba(245,240,232,0.3)', borderTopColor: '#F5F0E8', borderRadius: '50%', animation: 'spin 0.8s linear infinite', display: 'inline-block' }} />
+                    {loadingMsg}
+                  </span>
+                ) : 'Save asset & questionnaire →'}
               </button>
             </div>
           </div>

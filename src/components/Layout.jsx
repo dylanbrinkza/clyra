@@ -1,4 +1,5 @@
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
+import { supabase } from '../lib/supabase'
 import '../styles/app.css'
 
 function SidebarItem({ to, icon, children }) {
@@ -10,7 +11,17 @@ function SidebarItem({ to, icon, children }) {
   )
 }
 
-export default function Layout() {
+export default function Layout({ session }) {
+  const navigate = useNavigate()
+
+  const handleSignOut = async () => {
+    await supabase.auth.signOut()
+    navigate('/login')
+  }
+
+  const email = session?.user?.email || ''
+  const initials = email ? email.slice(0, 2).toUpperCase() : 'JH'
+
   return (
     <div className="app">
       <div className="topbar">
@@ -22,8 +33,10 @@ export default function Layout() {
           <NavLink to="/incidents" className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}>Incidents</NavLink>
         </nav>
         <div className="user-area">
-          Acme Corp
-          <div className="avatar">JH</div>
+          <span style={{ fontSize: 12 }}>{email}</span>
+          <div className="avatar" style={{ cursor: 'pointer' }} onClick={handleSignOut} title="Sign out">
+            {initials}
+          </div>
         </div>
       </div>
 
@@ -70,6 +83,16 @@ export default function Layout() {
                 <circle cx="8" cy="8" r="6"/><path d="M8 5v3.5M8 11v.5"/>
               </svg>
             }>Incidents</SidebarItem>
+          </div>
+
+          <div style={{ position: 'absolute', bottom: '1.5rem', left: 0, width: 210, padding: '0 1.25rem' }}>
+            <button onClick={handleSignOut} style={{
+              width: '100%', padding: '7px 0', fontSize: 12, color: 'var(--muted)',
+              background: 'none', border: '0.5px solid var(--border)', borderRadius: 6,
+              cursor: 'pointer', fontFamily: 'inherit'
+            }}>
+              Sign out
+            </button>
           </div>
         </aside>
 

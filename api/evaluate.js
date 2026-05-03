@@ -25,44 +25,50 @@ ${qaPairs.map((qa) => `[${qa.domain} — ${qa.control_ref}]
 Q: ${qa.question}
 A: ${qa.answer}`).join('\n\n')}
 
-Evaluate these responses. Consider adequacy for this risk tier, evasive or vague answers, and overall security posture.
+Evaluate these responses thoroughly. Consider adequacy for this risk tier, evasive or vague answers, and overall security posture.
 
 Respond ONLY with a JSON object, no other text:
 {
   "score": <0-100, higher = more risk>,
   "verdict": "<Accept | Accept with conditions | Escalate for further review | Do not proceed>",
-  "summary": "<3-4 sentence plain English summary>",
-  "findings": [
+  "summary": "<2-3 sentence plain English overview of the vendor's overall security posture>",
+  "strengths": [
     {
-      "severity": "<Required | Recommended | Advisory>",
-      "domain": "<domain>",
-      "text": "<specific finding>",
-      "control_ref": "<ISO 27001 reference>",
-      "flagged": <true if evasive/vague>
+      "title": "<short strength title>",
+      "detail": "<1-2 sentence explanation of why this is a strength>"
     }
   ],
-  "strengths": ["<strength>"],
-  "flagged_responses": [<0-indexed question numbers with evasive answers>]
+  "recommendations": [
+    {
+      "severity": "<Required | Recommended | Advisory>",
+      "title": "<short recommendation title>",
+      "detail": "<specific actionable recommendation>",
+      "control_ref": "<ISO 27001 reference>",
+      "flagged": <true if the answer was evasive or vague>
+    }
+  ],
+  "flagged_responses": [<0-indexed question numbers with evasive/vague answers>]
 }`
 
   try {
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': process.env.ANTHROPIC_API_KEY,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-5',
-        max_tokens: 2000,
-        messages: [{ role: 'user', content: prompt }],
-      }),
+      headers: { 'Content-Type': 'application/json', 'x-api-key': process.env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
+      body: JSON.stringify({ model: 'claude-sonnet-4-5', max_tokens: 2000, messages: [{ role: 'user', content: prompt }] }),
     })
     const data = await response.json()
     if (!response.ok) return res.status(500).json({ error: data.error?.message || 'API error' })
-    const text = data.content[0].text.replace(/```json|```/g, '').trim()
-    return res.status(200).json(JSON.parse(text))
+    const evaluation = JSON.parse(data.content[0].text.replace(/```json|```/g, '').trim())
+
+    // backward compat — also populate findings from recommendations
+    evaluation.findings = evaluation.recommendations?.map(r => ({
+      severity: r.severity?.toLowerCase() === 'required' ? 'red' : r.severity?.toLowerCase() === 'recommended' ? 'amber' : 'gray',
+      text: r.detail,
+      label: r.severity,
+      flagged: r.flagged,
+    })) || []
+
+    return res.status(200).json(evaluation)
   } catch (err) {
     return res.status(500).json({ error: err.message })
   }

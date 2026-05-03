@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 
@@ -6,31 +6,48 @@ const steps = ['Risk profile', 'Tier assignment', 'Review & send']
 
 const profileFields = [
   { key: 'data_sensitivity', label: 'Data sensitivity', options: ['None', 'Non-personal', 'Personal data', 'Special category', 'Financial', 'Health data'] },
-  { key: 'network_access', label: 'Network access', options: ['None', 'Internet-only', 'Internal network', 'Privileged', 'Administrative'] },
-  { key: 'integration_depth', label: 'Integration depth', options: ['Standalone', 'API integration', 'SSO', 'Embedded agent', 'Infrastructure level'] },
   { key: 'physical_access', label: 'Physical access', options: ['None', 'Site access', 'Data centre or server room access'] },
   { key: 'vendor_maturity', label: 'Vendor maturity', options: ['Enterprise with certifications', 'Established SME', 'Early-stage', 'Unknown'] },
   { key: 'contract_value', label: 'Contract value', options: ['Low (under £10k)', 'Medium (£10k–£100k)', 'High (over £100k)'] },
   { key: 'criticality', label: 'Criticality', options: ['Non-critical', 'Important', 'Business critical', 'Mission critical'] },
+  { key: 'network_access', label: 'Network access', options: ['None', 'Internet-only', 'Internal network', 'Privileged', 'Administrative'] },
 ]
+
+const integrationOptions = [
+  'Standalone',
+  'API integration',
+  'SSO',
+  'Embedded agent',
+  'Infrastructure level',
+  'Webhook',
+  'Data export / import',
+]
+
+const certTypes = ['SOC 2 Type II', 'ISO 27001', 'ISO 27701', 'Cyber Essentials', 'Cyber Essentials Plus', 'PCI DSS', 'HIPAA', 'Other']
 
 export default function NewQuestionnaire() {
   const navigate = useNavigate()
   const location = useLocation()
   const prefill = location.state?.prefill || {}
+  const fileInputRef = useRef()
 
   const [step, setStep] = useState(0)
   const [assetName, setAssetName] = useState(prefill.assetName || '')
   const [assetType, setAssetType] = useState(prefill.assetType || 'SaaS')
   const [companyName, setCompanyName] = useState(prefill.companyName || '')
+  const [vendorUrl, setVendorUrl] = useState('')
   const [vendorEmail, setVendorEmail] = useState(prefill.contactEmail || '')
   const [vendorName, setVendorName] = useState(prefill.contactName || '')
   const [contractRef, setContractRef] = useState('')
   const [integrationNotes, setIntegrationNotes] = useState('')
+  const [integrationDepths, setIntegrationDepths] = useState(['API integration'])
+  const [uploadedCerts, setUploadedCerts] = useState([])
+  const [uploadingCert, setUploadingCert] = useState(false)
+  const [selectedCertType, setSelectedCertType] = useState('SOC 2 Type II')
+  const [emailError, setEmailError] = useState('')
   const [profile, setProfile] = useState({
     data_sensitivity: 'Personal data',
     network_access: 'Internet-only',
-    integration_depth: 'API integration',
     physical_access: 'None',
     vendor_maturity: 'Enterprise with certifications',
     contract_value: 'Medium (£10k–£100k)',
@@ -42,7 +59,35 @@ export default function NewQuestionnaire() {
   const [loadingMsg, setLoadingMsg] = useState('')
   const [error, setError] = useState('')
 
+  const toggleIntegration = (opt) => {
+    setIntegrationDepths(prev =>
+      prev.includes(opt) ? prev.filter(i => i !== opt) : [...prev, opt]
+    )
+  }
+
+  const handleCertUpload = async (e) => {
+    const file = e.target.files[0]
+    if (!file) return
+    setUploadingCert(true)
+    try {
+      const path = `temp/${Date.now()}-${file.name}`
+      const { error: uploadError } = await supabase.storage.from('certifications').upload(path, file)
+      if (uploadError) throw uploadError
+      const { data: { publicUrl } } = supabase.storage.from('certifications').getPublicUrl(path)
+      setUploadedCerts(prev => [...prev, { file_name: file.name, file_url: publicUrl, cert_type: selectedCertType }])
+    } catch (err) {
+      setError('Upload failed: ' + err.message)
+    }
+    setUploadingCert(false)
+    e.target.value = ''
+  }
+
   const runProfile = async () => {
+    setEmailError('')
+    if (!vendorEmail.trim()) {
+      setEmailError('Vendor email is required before sending a questionnaire.')
+      return
+    }
     setLoading(true)
     setError('')
     setLoadingMsg('Analysing your risk profile...')
@@ -50,7 +95,12 @@ export default function NewQuestionnaire() {
       const res = await fetch('/api/profile', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ assetName, profile }),
+        body: JSON.stringify({
+          assetName,
+          vendorUrl,
+          profile: { ...profile, integration_depth: integrationDepths.join(', ') },
+          certifications: uploadedCerts.map(c => c.cert_type),
+        }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
@@ -59,7 +109,13 @@ export default function NewQuestionnaire() {
       const res2 = await fetch('/api/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ assetName, tier: data.tier, profile }),
+        body: JSON.stringify({
+          assetName,
+          vendorUrl,
+          tier: data.tier,
+          profile: { ...profile, integration_depth: integrationDepths.join(', ') },
+          certifications: uploadedCerts.map(c => c.cert_type),
+        }),
       })
       const qs = await res2.json()
       if (!res2.ok) throw new Error(qs.error)
@@ -78,14 +134,13 @@ export default function NewQuestionnaire() {
     setLoadingMsg('Saving questionnaire...')
     try {
       const { data: { user } } = await supabase.auth.getUser()
-
-      // Save questionnaire only — no asset created yet
       const { data: qData, error: qError } = await supabase
         .from('questionnaires')
         .insert([{
           asset_name: assetName,
           asset_type: assetType,
           company_name: companyName,
+          vendor_url: vendorUrl,
           tier: tierResult.tier,
           tier_justification: tierResult.justification,
           status: 'sent',
@@ -96,21 +151,26 @@ export default function NewQuestionnaire() {
           integration_notes: integrationNotes,
           created_by: user?.email || 'unknown',
           ...profile,
+          integration_depth: integrationDepths.join(', '),
         }])
         .select()
         .single()
       if (qError) throw new Error(qError.message)
 
-      const questionsToInsert = questions.map(q => ({
-        questionnaire_id: qData.id,
-        domain: q.domain,
-        question: q.question,
-        control_ref: q.control_ref,
-        order_num: q.order_num,
-        follow_up_trigger: q.follow_up_trigger || '',
-      }))
-      const { error: qqError } = await supabase.from('questionnaire_questions').insert(questionsToInsert)
-      if (qqError) throw new Error(qqError.message)
+      if (uploadedCerts.length > 0) {
+        await supabase.from('questionnaire_certifications').insert(
+          uploadedCerts.map(c => ({ ...c, questionnaire_id: qData.id }))
+        )
+      }
+
+      await supabase.from('questionnaire_questions').insert(
+        questions.map(q => ({
+          questionnaire_id: qData.id,
+          domain: q.domain, question: q.question,
+          control_ref: q.control_ref, order_num: q.order_num,
+          follow_up_trigger: q.follow_up_trigger || '',
+        }))
+      )
 
       navigate(`/questionnaires/${qData.id}`)
     } catch (err) {
@@ -146,10 +206,11 @@ export default function NewQuestionnaire() {
         <div className="card">
           <div className="card-header"><span className="card-title">Vendor risk profile</span></div>
 
+          {/* Asset basics */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
             <div>
               <label style={labelStyle}>Asset name *</label>
-              <input value={assetName} onChange={e => setAssetName(e.target.value)} placeholder="e.g. Salesforce CRM" style={inputStyle} />
+              <input value={assetName} onChange={e => setAssetName(e.target.value)} placeholder="e.g. Microsoft Teams" style={inputStyle} />
             </div>
             <div>
               <label style={labelStyle}>Asset type *</label>
@@ -160,32 +221,93 @@ export default function NewQuestionnaire() {
             </div>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 16 }}>
+          {/* Vendor details */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
             <div>
               <label style={labelStyle}>Company name</label>
-              <input value={companyName} onChange={e => setCompanyName(e.target.value)} placeholder="Vendor Inc." style={inputStyle} />
+              <input value={companyName} onChange={e => setCompanyName(e.target.value)} placeholder="Microsoft Corp." style={inputStyle} />
             </div>
+            <div>
+              <label style={labelStyle}>Vendor website</label>
+              <input value={vendorUrl} onChange={e => setVendorUrl(e.target.value)} placeholder="https://microsoft.com/teams" style={inputStyle} />
+              <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>Claude will use this to understand what the tool does</div>
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12, marginBottom: 16 }}>
             <div>
               <label style={labelStyle}>Contact name</label>
               <input value={vendorName} onChange={e => setVendorName(e.target.value)} placeholder="Jane Smith" style={inputStyle} />
             </div>
             <div>
-              <label style={labelStyle}>Contact email</label>
-              <input type="email" value={vendorEmail} onChange={e => setVendorEmail(e.target.value)} placeholder="jane@vendor.com" style={inputStyle} />
+              <label style={labelStyle}>Contact email *</label>
+              <input type="email" value={vendorEmail} onChange={e => { setVendorEmail(e.target.value); setEmailError('') }}
+                placeholder="jane@vendor.com"
+                style={{ ...inputStyle, borderColor: emailError ? 'var(--red)' : 'rgba(44,31,14,0.25)' }} />
+              {emailError && <div style={{ fontSize: 11, color: 'var(--red)', marginTop: 4 }}>{emailError}</div>}
             </div>
-          </div>
-
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
             <div>
               <label style={labelStyle}>Contract reference</label>
-              <input value={contractRef} onChange={e => setContractRef(e.target.value)} placeholder="e.g. MSA-2024-001" style={inputStyle} />
-            </div>
-            <div>
-              <label style={labelStyle}>Integration notes</label>
-              <input value={integrationNotes} onChange={e => setIntegrationNotes(e.target.value)} placeholder="What does this connect to?" style={inputStyle} />
+              <input value={contractRef} onChange={e => setContractRef(e.target.value)} placeholder="MSA-2024-001" style={inputStyle} />
             </div>
           </div>
 
+          <div style={{ marginBottom: 16 }}>
+            <label style={labelStyle}>Integration notes</label>
+            <input value={integrationNotes} onChange={e => setIntegrationNotes(e.target.value)}
+              placeholder="What does this asset connect to? e.g. Syncs with Salesforce CRM, SSO via Azure AD" style={inputStyle} />
+          </div>
+
+          {/* Integration depth - multi select */}
+          <div style={{ marginBottom: 16 }}>
+            <label style={labelStyle}>Integration depth — select all that apply</label>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+              {integrationOptions.map(opt => (
+                <div key={opt} onClick={() => toggleIntegration(opt)} style={{
+                  padding: '6px 12px', borderRadius: 20, fontSize: 12, cursor: 'pointer',
+                  border: `1px solid ${integrationDepths.includes(opt) ? 'var(--orange)' : 'rgba(44,31,14,0.2)'}`,
+                  background: integrationDepths.includes(opt) ? '#FFF7F2' : '#fff',
+                  color: integrationDepths.includes(opt) ? 'var(--orange)' : 'var(--muted)',
+                  fontWeight: integrationDepths.includes(opt) ? 500 : 400,
+                  userSelect: 'none',
+                }}>
+                  {integrationDepths.includes(opt) ? '✓ ' : ''}{opt}
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Cert uploads */}
+          <div style={{ marginBottom: 16, borderTop: '0.5px solid var(--border)', paddingTop: 16 }}>
+            <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 4 }}>Existing certifications</div>
+            <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 12, lineHeight: 1.5 }}>
+              Upload any certifications the vendor has already provided. Claude will review these and tailor the questionnaire accordingly — skipping areas already evidenced and probing gaps more specifically.
+            </div>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+              <select value={selectedCertType} onChange={e => setSelectedCertType(e.target.value)} style={{ ...inputStyle, flex: 1 }}>
+                {certTypes.map(t => <option key={t}>{t}</option>)}
+              </select>
+              <button className="btn" onClick={() => fileInputRef.current?.click()} disabled={uploadingCert}
+                style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>
+                {uploadingCert ? 'Uploading...' : '+ Upload'}
+              </button>
+              <input ref={fileInputRef} type="file" accept=".pdf,.jpg,.jpeg,.png" style={{ display: 'none' }} onChange={handleCertUpload} />
+            </div>
+            {uploadedCerts.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {uploadedCerts.map((c, i) => (
+                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', background: '#EAF3DE', borderRadius: 6 }}>
+                    <div style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--green)', flexShrink: 0 }} />
+                    <div style={{ flex: 1, fontSize: 13 }}><strong>{c.cert_type}</strong> — {c.file_name}</div>
+                    <button onClick={() => setUploadedCerts(prev => prev.filter((_, j) => j !== i))}
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', fontSize: 16, lineHeight: 1 }}>×</button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Risk profile */}
           <div style={{ borderTop: '0.5px solid var(--border)', paddingTop: 16, marginBottom: 16 }}>
             <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 12 }}>Risk profile inputs</div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
@@ -205,8 +327,7 @@ export default function NewQuestionnaire() {
           <button className="btn btn-primary" style={{ width: '100%' }} onClick={runProfile} disabled={loading || !assetName}>
             {loading ? (
               <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
-                <span style={spinnerStyle} />
-                {loadingMsg}
+                <span style={spinnerStyle} />{loadingMsg}
               </span>
             ) : 'Analyse risk profile →'}
           </button>
@@ -256,7 +377,7 @@ export default function NewQuestionnaire() {
           <div className="card">
             <div className="card-header"><span className="card-title">Review & send</span></div>
             <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 16, lineHeight: 1.6 }}>
-              Once sent, the vendor completes the questionnaire via a secure link. After AI evaluation, the questionnaire will sit in a <strong>pending approval</strong> state — you review the verdict and manually approve it to add the asset to your register.
+              Once sent, the vendor completes the questionnaire via a secure link. After AI evaluation, it will sit in <strong>pending approval</strong> — review the verdict and manually approve to add to your asset register.
             </div>
             <div style={{ background: 'var(--cream)', borderRadius: 8, padding: '12px 14px', marginBottom: 16, fontSize: 13 }}>
               {[
@@ -264,27 +385,26 @@ export default function NewQuestionnaire() {
                 ['Type', assetType],
                 ['Company', companyName || '—'],
                 ['Vendor contact', vendorName || '—'],
-                ['Email', vendorEmail || '—'],
+                ['Email', vendorEmail],
+                ['Integrations', integrationDepths.join(', ')],
+                ['Certifications uploaded', uploadedCerts.length > 0 ? uploadedCerts.map(c => c.cert_type).join(', ') : 'None'],
                 ['Tier', `Tier ${tierResult.tier} — ${tierResult.label}`],
                 ['Questions', questions.length],
                 ['Link expires', '14 days'],
               ].map(([label, value]) => (
                 <div key={label} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
                   <span style={{ color: 'var(--muted)' }}>{label}</span>
-                  <span>{value}</span>
+                  <span style={{ textAlign: 'right', maxWidth: 300 }}>{value}</span>
                 </div>
               ))}
             </div>
-
             {error && <div style={errorStyle}>{error}</div>}
-
             <div style={{ display: 'flex', gap: 10 }}>
               <button className="btn" onClick={() => setStep(0)} style={{ flex: 1 }}>← Edit profile</button>
               <button className="btn btn-primary" onClick={saveAndSend} disabled={loading} style={{ flex: 2 }}>
                 {loading ? (
                   <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
-                    <span style={spinnerStyle} />
-                    {loadingMsg}
+                    <span style={spinnerStyle} />{loadingMsg}
                   </span>
                 ) : 'Save & send questionnaire →'}
               </button>

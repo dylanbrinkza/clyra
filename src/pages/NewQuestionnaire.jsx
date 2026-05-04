@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import { getOrgContext } from '../lib/orgContext'
 
 const steps = ['Risk profile', 'Tier assignment', 'Review & send']
 
@@ -13,16 +14,7 @@ const profileFields = [
   { key: 'network_access', label: 'Network access', options: ['None', 'Internet-only', 'Internal network', 'Privileged', 'Administrative'] },
 ]
 
-const integrationOptions = [
-  'Standalone',
-  'API integration',
-  'SSO',
-  'Embedded agent',
-  'Infrastructure level',
-  'Webhook',
-  'Data export / import',
-]
-
+const integrationOptions = ['Standalone', 'API integration', 'SSO', 'Embedded agent', 'Infrastructure level', 'Webhook', 'Data export / import']
 const certTypes = ['SOC 2 Type II', 'ISO 27001', 'ISO 27701', 'Cyber Essentials', 'Cyber Essentials Plus', 'PCI DSS', 'HIPAA', 'Other']
 
 export default function NewQuestionnaire() {
@@ -32,6 +24,10 @@ export default function NewQuestionnaire() {
   const fileInputRef = useRef()
 
   const [step, setStep] = useState(0)
+  const [orgContext, setOrgContext] = useState(null)
+  const [orgLoaded, setOrgLoaded] = useState(false)
+
+  // Vendor details
   const [assetName, setAssetName] = useState(prefill.assetName || '')
   const [assetType, setAssetType] = useState(prefill.assetType || 'SaaS')
   const [companyName, setCompanyName] = useState(prefill.companyName || '')
@@ -45,6 +41,7 @@ export default function NewQuestionnaire() {
   const [uploadingCert, setUploadingCert] = useState(false)
   const [selectedCertType, setSelectedCertType] = useState('SOC 2 Type II')
   const [emailError, setEmailError] = useState('')
+
   const [profile, setProfile] = useState({
     data_sensitivity: 'Personal data',
     network_access: 'Internet-only',
@@ -53,26 +50,23 @@ export default function NewQuestionnaire() {
     contract_value: 'Medium (£10k–£100k)',
     criticality: 'Important',
   })
+
   const [tierResult, setTierResult] = useState(null)
   const [questions, setQuestions] = useState([])
   const [loading, setLoading] = useState(false)
   const [loadingMsg, setLoadingMsg] = useState('')
-  const [orgContext, setOrgContext] = useState(null)
-
-  useEffect(() => {
-    async function loadOrgContext() {
-      const { data: { user } } = await supabase.auth.getUser()
-      const { data } = await supabase.from('organisation_context').select('*').eq('user_id', user.id).single()
-      if (data) setOrgContext(data)
-    }
-    loadOrgContext()
-  }, [])
   const [error, setError] = useState('')
 
+  // Load org context on mount
+  useEffect(() => {
+    getOrgContext().then(ctx => {
+      setOrgContext(ctx)
+      setOrgLoaded(true)
+    })
+  }, [])
+
   const toggleIntegration = (opt) => {
-    setIntegrationDepths(prev =>
-      prev.includes(opt) ? prev.filter(i => i !== opt) : [...prev, opt]
-    )
+    setIntegrationDepths(prev => prev.includes(opt) ? prev.filter(i => i !== opt) : [...prev, opt])
   }
 
   const handleCertUpload = async (e) => {
@@ -102,19 +96,26 @@ export default function NewQuestionnaire() {
     setError('')
     setLoadingMsg('Analysing your risk profile...')
     try {
+      const profilePayload = {
+        ...profile,
+        integration_depth: integrationDepths.join(', '),
+      }
+
       const res = await fetch('/api/profile', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           assetName,
           vendorUrl,
-          profile: { ...profile, integration_depth: integrationDepths.join(', ') },
+          profile: profilePayload,
           certifications: uploadedCerts.map(c => c.cert_type),
+          orgContext,
         }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
       setTierResult(data)
+
       setLoadingMsg('Hold tight — generating tailored questions...')
       const res2 = await fetch('/api/generate', {
         method: 'POST',
@@ -123,13 +124,14 @@ export default function NewQuestionnaire() {
           assetName,
           vendorUrl,
           tier: data.tier,
-          profile: { ...profile, integration_depth: integrationDepths.join(', ') },
+          profile: profilePayload,
           certifications: uploadedCerts.map(c => c.cert_type),
+          orgContext,
         }),
       })
       const qs = await res2.json()
       if (!res2.ok) throw new Error(qs.error)
-      setQuestions(qs)
+      setQuestions(Array.isArray(qs) ? qs : [])
       setStep(1)
     } catch (err) {
       setError(err.message)
@@ -144,6 +146,7 @@ export default function NewQuestionnaire() {
     setLoadingMsg('Saving questionnaire...')
     try {
       const { data: { user } } = await supabase.auth.getUser()
+
       const { data: qData, error: qError } = await supabase
         .from('questionnaires')
         .insert([{
@@ -153,6 +156,7 @@ export default function NewQuestionnaire() {
           vendor_url: vendorUrl,
           tier: tierResult.tier,
           tier_justification: tierResult.justification,
+          framework_notes: tierResult.framework_notes || null,
           status: 'sent',
           approval_status: 'pending',
           vendor_email: vendorEmail,
@@ -173,14 +177,20 @@ export default function NewQuestionnaire() {
         )
       }
 
-      await supabase.from('questionnaire_questions').insert(
-        questions.map(q => ({
-          questionnaire_id: qData.id,
-          domain: q.domain, question: q.question,
-          control_ref: q.control_ref, order_num: q.order_num,
-          follow_up_trigger: q.follow_up_trigger || '',
-        }))
-      )
+      const questionsToInsert = questions.map(q => ({
+        questionnaire_id: qData.id,
+        domain: q.domain,
+        question: q.question,
+        control_ref: q.control_ref || '',
+        nist_ref: q.nist_ref || '',
+        cis_ref: q.cis_ref || '',
+        ce_ref: q.ce_ref || '',
+        order_num: q.order_num,
+        follow_up_trigger: q.follow_up_trigger || '',
+      }))
+
+      const { error: qqError } = await supabase.from('questionnaire_questions').insert(questionsToInsert)
+      if (qqError) throw new Error(qqError.message)
 
       navigate(`/questionnaires/${qData.id}`)
     } catch (err) {
@@ -199,6 +209,20 @@ export default function NewQuestionnaire() {
       <div style={{ marginBottom: '2rem' }}>
         <button className="btn" onClick={() => navigate(-1)} style={{ marginBottom: 16 }}>← Back</button>
         <h2 style={{ fontSize: 18, fontWeight: 500, marginBottom: 12 }}>New questionnaire</h2>
+
+        {/* Org context indicator */}
+        {orgLoaded && (
+          <div style={{ marginBottom: 12, padding: '8px 12px', borderRadius: 8, background: orgContext ? '#EAF3DE' : '#FAEEDA', display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
+            <span>{orgContext ? '✦' : '⚠'}</span>
+            <span style={{ color: orgContext ? 'var(--green)' : 'var(--amber)' }}>
+              {orgContext
+                ? `Using organisation context: ${orgContext.company_name || 'your organisation'} — assessments personalised to your regulatory environment`
+                : 'No organisation context set — add it in Settings → Organisation for personalised assessments'}
+            </span>
+            {!orgContext && <button className="btn" style={{ marginLeft: 'auto', fontSize: 11, padding: '3px 10px' }} onClick={() => navigate('/org-context')}>Set up →</button>}
+          </div>
+        )}
+
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           {steps.map((s, i) => (
             <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -216,7 +240,6 @@ export default function NewQuestionnaire() {
         <div className="card">
           <div className="card-header"><span className="card-title">Vendor risk profile</span></div>
 
-          {/* Asset basics */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
             <div>
               <label style={labelStyle}>Asset name *</label>
@@ -231,16 +254,15 @@ export default function NewQuestionnaire() {
             </div>
           </div>
 
-          {/* Vendor details */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
             <div>
               <label style={labelStyle}>Company name</label>
-              <input value={companyName} onChange={e => setCompanyName(e.target.value)} placeholder="Microsoft Corp." style={inputStyle} />
+              <input value={companyName} onChange={e => setCompanyName(e.target.value)} placeholder="Vendor Inc." style={inputStyle} />
             </div>
             <div>
               <label style={labelStyle}>Vendor website</label>
-              <input value={vendorUrl} onChange={e => setVendorUrl(e.target.value)} placeholder="https://microsoft.com/teams" style={inputStyle} />
-              <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>Claude will use this to understand what the tool does</div>
+              <input value={vendorUrl} onChange={e => setVendorUrl(e.target.value)} placeholder="https://vendor.com" style={inputStyle} />
+              <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>Claude uses this to understand what the tool does</div>
             </div>
           </div>
 
@@ -251,7 +273,8 @@ export default function NewQuestionnaire() {
             </div>
             <div>
               <label style={labelStyle}>Contact email *</label>
-              <input type="email" value={vendorEmail} onChange={e => { setVendorEmail(e.target.value); setEmailError('') }}
+              <input type="email" value={vendorEmail}
+                onChange={e => { setVendorEmail(e.target.value); setEmailError('') }}
                 placeholder="jane@vendor.com"
                 style={{ ...inputStyle, borderColor: emailError ? 'var(--red)' : 'rgba(44,31,14,0.25)' }} />
               {emailError && <div style={{ fontSize: 11, color: 'var(--red)', marginTop: 4 }}>{emailError}</div>}
@@ -265,10 +288,9 @@ export default function NewQuestionnaire() {
           <div style={{ marginBottom: 16 }}>
             <label style={labelStyle}>Integration notes</label>
             <input value={integrationNotes} onChange={e => setIntegrationNotes(e.target.value)}
-              placeholder="What does this asset connect to? e.g. Syncs with Salesforce CRM, SSO via Azure AD" style={inputStyle} />
+              placeholder="What does this connect to? e.g. Syncs with Salesforce, SSO via Azure AD" style={inputStyle} />
           </div>
 
-          {/* Integration depth - multi select */}
           <div style={{ marginBottom: 16 }}>
             <label style={labelStyle}>Integration depth — select all that apply</label>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
@@ -278,8 +300,7 @@ export default function NewQuestionnaire() {
                   border: `1px solid ${integrationDepths.includes(opt) ? 'var(--orange)' : 'rgba(44,31,14,0.2)'}`,
                   background: integrationDepths.includes(opt) ? '#FFF7F2' : '#fff',
                   color: integrationDepths.includes(opt) ? 'var(--orange)' : 'var(--muted)',
-                  fontWeight: integrationDepths.includes(opt) ? 500 : 400,
-                  userSelect: 'none',
+                  fontWeight: integrationDepths.includes(opt) ? 500 : 400, userSelect: 'none',
                 }}>
                   {integrationDepths.includes(opt) ? '✓ ' : ''}{opt}
                 </div>
@@ -287,21 +308,19 @@ export default function NewQuestionnaire() {
             </div>
           </div>
 
-          {/* Cert uploads */}
           <div style={{ marginBottom: 16, borderTop: '0.5px solid var(--border)', paddingTop: 16 }}>
             <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 4 }}>Existing certifications</div>
             <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 12, lineHeight: 1.5 }}>
-              Upload any certifications the vendor has already provided. Claude will review these and tailor the questionnaire accordingly — skipping areas already evidenced and probing gaps more specifically.
+              Upload any certifications the vendor has already provided. Claude will review these and tailor questions accordingly.
             </div>
             <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
               <select value={selectedCertType} onChange={e => setSelectedCertType(e.target.value)} style={{ ...inputStyle, flex: 1 }}>
                 {certTypes.map(t => <option key={t}>{t}</option>)}
               </select>
-              <button className="btn" onClick={() => fileInputRef.current?.click()} disabled={uploadingCert}
-                style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>
+              <button className="btn" onClick={() => fileInputRef.current?.click()} disabled={uploadingCert} style={{ whiteSpace: 'nowrap', flexShrink: 0 }}>
                 {uploadingCert ? 'Uploading...' : '+ Upload'}
               </button>
-              <input ref={fileInputRef} type="file" accept=".pdf,.jpg,.jpeg,.png" style={{ display: 'none' }} onChange={handleCertUpload} />
+              <input ref={fileInputRef} type="file" accept=".pdf,.jpg,.jpeg,.png,.txt" style={{ display: 'none' }} onChange={handleCertUpload} />
             </div>
             {uploadedCerts.length > 0 && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -310,14 +329,13 @@ export default function NewQuestionnaire() {
                     <div style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--green)', flexShrink: 0 }} />
                     <div style={{ flex: 1, fontSize: 13 }}><strong>{c.cert_type}</strong> — {c.file_name}</div>
                     <button onClick={() => setUploadedCerts(prev => prev.filter((_, j) => j !== i))}
-                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', fontSize: 16, lineHeight: 1 }}>×</button>
+                      style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--muted)', fontSize: 16 }}>×</button>
                   </div>
                 ))}
               </div>
             )}
           </div>
 
-          {/* Risk profile */}
           <div style={{ borderTop: '0.5px solid var(--border)', paddingTop: 16, marginBottom: 16 }}>
             <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 12 }}>Risk profile inputs</div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
@@ -358,6 +376,21 @@ export default function NewQuestionnaire() {
                 <div style={{ fontSize: 13, color: 'var(--muted)', lineHeight: 1.6 }}>{tierResult.justification}</div>
               </div>
             </div>
+            {tierResult.framework_notes && (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 16 }}>
+                {[
+                  { key: 'iso27001', label: 'ISO 27001', color: '#2C1F0E', bg: 'var(--cream2)' },
+                  { key: 'nist_csf', label: 'NIST CSF 2.0', color: '#185FA5', bg: '#E6F1FB' },
+                  { key: 'cis', label: 'CIS Controls', color: 'var(--green)', bg: '#EAF3DE' },
+                  { key: 'cyber_essentials', label: 'Cyber Essentials', color: 'var(--amber)', bg: '#FAEEDA' },
+                ].map(fw => tierResult.framework_notes[fw.key] && (
+                  <div key={fw.key} style={{ padding: '8px 10px', background: fw.bg, borderRadius: 6 }}>
+                    <div style={{ fontSize: 10, fontWeight: 600, color: fw.color, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 3 }}>{fw.label}</div>
+                    <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.4 }}>{tierResult.framework_notes[fw.key]}</div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="card">
@@ -371,13 +404,18 @@ export default function NewQuestionnaire() {
                   {domain}
                 </div>
                 {questions.filter(q => q.domain === domain).map((q, i) => (
-                  <div key={i} style={{ display: 'flex', gap: 10, marginBottom: 8, fontSize: 13 }}>
+                  <div key={i} style={{ display: 'flex', gap: 10, marginBottom: 10, fontSize: 13 }}>
                     <div style={{ color: 'var(--muted)', flexShrink: 0, width: 20, paddingTop: 1 }}>{q.order_num}.</div>
                     <div style={{ flex: 1 }}>
-                      {q.question}
+                      <div style={{ marginBottom: 4 }}>{q.question}</div>
+                      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                        {q.control_ref && <span style={{ fontSize: 10, padding: '1px 6px', background: 'var(--cream2)', borderRadius: 3, color: 'var(--muted)' }}>ISO {q.control_ref}</span>}
+                        {q.nist_ref && <span style={{ fontSize: 10, padding: '1px 6px', background: '#E6F1FB', borderRadius: 3, color: '#185FA5' }}>NIST {q.nist_ref}</span>}
+                        {q.cis_ref && <span style={{ fontSize: 10, padding: '1px 6px', background: '#EAF3DE', borderRadius: 3, color: 'var(--green)' }}>CIS {q.cis_ref}</span>}
+                        {q.ce_ref && <span style={{ fontSize: 10, padding: '1px 6px', background: '#FAEEDA', borderRadius: 3, color: 'var(--amber)' }}>{q.ce_ref}</span>}
+                      </div>
                       {q.follow_up_trigger && <div style={{ fontSize: 11, color: 'var(--orange)', marginTop: 3 }}>↳ {q.follow_up_trigger}</div>}
                     </div>
-                    <div style={{ fontSize: 11, color: 'var(--muted)', flexShrink: 0, paddingTop: 2 }}>{q.control_ref}</div>
                   </div>
                 ))}
               </div>
@@ -387,20 +425,17 @@ export default function NewQuestionnaire() {
           <div className="card">
             <div className="card-header"><span className="card-title">Review & send</span></div>
             <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 16, lineHeight: 1.6 }}>
-              Once sent, the vendor completes the questionnaire via a secure link. After AI evaluation, it will sit in <strong>pending approval</strong> — review the verdict and manually approve to add to your asset register.
+              Once sent, the vendor completes the questionnaire via a secure link. After AI evaluation, it sits in <strong>pending approval</strong> for your review before being added to the asset register.
             </div>
             <div style={{ background: 'var(--cream)', borderRadius: 8, padding: '12px 14px', marginBottom: 16, fontSize: 13 }}>
               {[
-                ['Asset', assetName],
-                ['Type', assetType],
-                ['Company', companyName || '—'],
-                ['Vendor contact', vendorName || '—'],
-                ['Email', vendorEmail],
+                ['Asset', assetName], ['Type', assetType], ['Company', companyName || '—'],
+                ['Vendor contact', vendorName || '—'], ['Email', vendorEmail],
                 ['Integrations', integrationDepths.join(', ')],
-                ['Certifications uploaded', uploadedCerts.length > 0 ? uploadedCerts.map(c => c.cert_type).join(', ') : 'None'],
+                ['Certs uploaded', uploadedCerts.length > 0 ? uploadedCerts.map(c => c.cert_type).join(', ') : 'None'],
                 ['Tier', `Tier ${tierResult.tier} — ${tierResult.label}`],
-                ['Questions', questions.length],
-                ['Link expires', '14 days'],
+                ['Questions', questions.length], ['Link expires', '14 days'],
+                ['Org context', orgContext ? `✓ ${orgContext.company_name || 'Applied'}` : '⚠ Not set'],
               ].map(([label, value]) => (
                 <div key={label} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
                   <span style={{ color: 'var(--muted)' }}>{label}</span>

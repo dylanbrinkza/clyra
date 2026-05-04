@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
+import { clearOrgContextCache } from '../lib/orgContext'
 
 const industries = ['Financial Services', 'Healthcare', 'Legal', 'Technology', 'Retail & eCommerce', 'Manufacturing', 'Education', 'Government & Public Sector', 'Professional Services', 'Media & Entertainment', 'Energy & Utilities', 'Other']
 const employeeCounts = ['1–10', '11–50', '51–200', '201–500', '501–1,000', '1,001–5,000', '5,000+']
@@ -90,6 +91,7 @@ export default function OrgContext() {
       if (data) setContextId(data.id)
     }
     setSaving(false)
+    clearOrgContextCache()
     setSaved(true)
     setTimeout(() => setSaved(false), 3000)
   }

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import { getOrgContext } from '../lib/orgContext'
 
 const verdictColor = { 'Accept': 'var(--green)', 'Accept with conditions': 'var(--amber)', 'Escalate for further review': 'var(--amber)', 'Do not proceed': 'var(--red)' }
 const verdictBg = { 'Accept': '#EAF3DE', 'Accept with conditions': '#FAEEDA', 'Escalate for further review': '#FAEEDA', 'Do not proceed': '#FAECE7' }
@@ -18,24 +19,18 @@ export default function QuestionnaireDetail() {
   const [questions, setQuestions] = useState([])
   const [responses, setResponses] = useState([])
   const [certs, setCerts] = useState([])
+  const [orgContext, setOrgContext] = useState(null)
   const [loading, setLoading] = useState(true)
   const [evaluating, setEvaluating] = useState(false)
   const [approving, setApproving] = useState(false)
   const [showRejectModal, setShowRejectModal] = useState(false)
   const [rejectionReason, setRejectionReason] = useState('')
-  const [orgContext, setOrgContext] = useState(null)
   const [copied, setCopied] = useState(false)
   const [error, setError] = useState('')
-  const [activeTab, setActiveTab] = useState('evaluation')
 
   useEffect(() => {
     fetchAll()
-    async function loadOrg() {
-      const { data: { user } } = await supabase.auth.getUser()
-      const { data } = await supabase.from('organisation_context').select('*').eq('user_id', user.id).single()
-      if (data) setOrgContext(data)
-    }
-    loadOrg()
+    getOrgContext().then(ctx => setOrgContext(ctx))
   }, [id])
 
   async function fetchAll() {
@@ -58,14 +53,25 @@ export default function QuestionnaireDetail() {
     setEvaluating(true)
     setError('')
     try {
-      const allResponses = questions.map(qq => ({ answer: responses.find(r => r.question_id === qq.id)?.answer || '' }))
+      const allResponses = questions.map(qq => ({
+        answer: responses.find(r => r.question_id === qq.id)?.answer || ''
+      }))
+
       const res = await fetch('/api/evaluate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ orgContext,
-          assetName: q.asset_name, tier: q.tier,
-          profile: { data_sensitivity: q.data_sensitivity, network_access: q.network_access, integration_depth: q.integration_depth, criticality: q.criticality },
-          questions, responses: allResponses,
+        body: JSON.stringify({
+          assetName: q.asset_name,
+          tier: q.tier,
+          profile: {
+            data_sensitivity: q.data_sensitivity,
+            network_access: q.network_access,
+            integration_depth: q.integration_depth,
+            criticality: q.criticality,
+          },
+          questions,
+          responses: allResponses,
+          orgContext,
         }),
       })
       const evaluation = await res.json()
@@ -73,11 +79,11 @@ export default function QuestionnaireDetail() {
 
       await supabase.from('questionnaires').update({
         verdict: evaluation.verdict,
-        framework_assessment: evaluation.framework_assessment,
         score: evaluation.score,
         summary: evaluation.summary,
-        strengths: evaluation.strengths,
-        recommendations: evaluation.recommendations,
+        strengths: evaluation.strengths || null,
+        recommendations: evaluation.recommendations || null,
+        framework_assessment: evaluation.framework_assessment || null,
         approval_status: 'pending',
       }).eq('id', id)
 
@@ -103,27 +109,39 @@ export default function QuestionnaireDetail() {
     try {
       const { data: { user } } = await supabase.auth.getUser()
       const assetId = q.asset_name.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-') + '-' + Date.now()
+
       const { error: assetError } = await supabase.from('assets').insert([{
-        id: assetId, name: q.asset_name, type: q.asset_type || 'SaaS',
-        tier: q.tier, rag: q.score >= 70 ? 'red' : q.score >= 40 ? 'amber' : 'green',
-        score: q.score, status: q.verdict || 'Evaluated',
+        id: assetId,
+        name: q.asset_name,
+        type: q.asset_type || 'SaaS',
+        tier: q.tier,
+        rag: q.score >= 70 ? 'red' : q.score >= 40 ? 'amber' : 'green',
+        score: q.score,
+        status: q.verdict || 'Evaluated',
         last_assessed: new Date().toLocaleDateString(),
-        company_name: q.company_name || '', contact_name: q.vendor_name || '',
-        contact_email: q.vendor_email || '', contract_reference: q.contract_reference || '',
+        company_name: q.company_name || '',
+        contact_name: q.vendor_name || '',
+        contact_email: q.vendor_email || '',
+        contract_reference: q.contract_reference || '',
         integration_notes: q.integration_notes || '',
-        vendor_url: q.vendor_url || '', questionnaire_status: 'evaluated',
+        vendor_url: q.vendor_url || '',
+        questionnaire_status: 'evaluated',
         certification_status: certs.length > 0 ? 'received' : 'not requested',
         added_by: user?.email || 'unknown',
       }])
       if (assetError) throw new Error(assetError.message)
 
       await supabase.from('questionnaires').update({
-        asset_id: assetId, approval_status: 'approved',
-        approved_at: new Date().toISOString(), approved_by: user?.email || "unknown",
+        asset_id: assetId,
+        approval_status: 'approved',
+        approved_at: new Date().toISOString(),
+        approved_by: user?.email || 'unknown',
       }).eq('id', id)
 
       await supabase.from('asset_audit_log').insert([{
-        asset_id: assetId, asset_name: q.asset_name, action: 'created',
+        asset_id: assetId,
+        asset_name: q.asset_name,
+        action: 'created',
         performed_by: user?.email || 'unknown',
         reason: 'Approved from questionnaire evaluation',
         changes: { tier: q.tier, verdict: q.verdict, score: q.score },
@@ -137,7 +155,10 @@ export default function QuestionnaireDetail() {
   }
 
   const handleReject = async () => {
-    await supabase.from('questionnaires').update({ approval_status: 'rejected', rejection_reason: rejectionReason }).eq('id', id)
+    await supabase.from('questionnaires').update({
+      approval_status: 'rejected',
+      rejection_reason: rejectionReason,
+    }).eq('id', id)
     setShowRejectModal(false)
     await fetchAll()
   }
@@ -173,7 +194,7 @@ export default function QuestionnaireDetail() {
           {isRejected && <span style={{ marginLeft: 8, padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 500, background: '#FAECE7', color: 'var(--red)' }}>Rejected</span>}
         </div>
         <div className="detail-title">{q.asset_name}</div>
-        {q.score && <div className="detail-score"><div className="detail-score-num">{q.score}</div><div className="detail-score-label">Risk score</div></div>}
+        {q.score != null && <div className="detail-score"><div className="detail-score-num">{q.score}</div><div className="detail-score-label">Risk score</div></div>}
       </div>
 
       {isPendingApproval && (
@@ -227,20 +248,47 @@ export default function QuestionnaireDetail() {
                     <div style={{ fontSize: 13 }}>{new Date(q.submitted_at).toLocaleDateString()}</div>
                   </div>
                 </>}
+                {orgContext && <>
+                  <div style={{ width: 1, height: 40, background: 'rgba(44,31,14,0.1)' }} />
+                  <div>
+                    <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 2 }}>Context</div>
+                    <div style={{ fontSize: 12, color: 'var(--green)' }}>✦ {orgContext.company_name || 'Org context applied'}</div>
+                  </div>
+                </>}
               </div>
-              {q.summary && <p style={{ fontSize: 13, color: "var(--muted)", lineHeight: 1.6, marginBottom: 16 }}>{q.summary}</p>}
+
+              {q.summary && <p style={{ fontSize: 13, color: 'var(--muted)', lineHeight: 1.6, marginBottom: 16 }}>{q.summary}</p>}
+
+              {q.framework_assessment && (
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 16 }}>
+                  {[
+                    { key: 'iso27001', label: 'ISO 27001', color: '#2C1F0E', bg: 'var(--cream2)' },
+                    { key: 'nist_csf', label: 'NIST CSF 2.0', color: '#185FA5', bg: '#E6F1FB' },
+                    { key: 'cis', label: 'CIS Controls v8', color: 'var(--green)', bg: '#EAF3DE' },
+                    { key: 'cyber_essentials', label: 'Cyber Essentials', color: 'var(--amber)', bg: '#FAEEDA' },
+                  ].filter(fw => q.framework_assessment[fw.key]).map(fw => (
+                    <div key={fw.key} style={{ padding: '10px 12px', background: fw.bg, borderRadius: 8 }}>
+                      <div style={{ fontSize: 10, fontWeight: 600, color: fw.color, textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 4 }}>{fw.label}</div>
+                      <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.4 }}>{q.framework_assessment[fw.key]}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
 
               {strengths.length > 0 && (
                 <div style={{ marginBottom: 16 }}>
-                  <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--green)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>
-                    ✓ Strengths
-                  </div>
+                  <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--green)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>✓ Strengths</div>
                   {strengths.map((s, i) => (
                     <div key={i} style={{ display: 'flex', gap: 10, marginBottom: 8, padding: '10px 12px', background: '#EAF3DE', borderRadius: 8 }}>
                       <div style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--green)', marginTop: 5, flexShrink: 0 }} />
                       <div>
                         <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 2 }}>{s.title}</div>
                         <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.4 }}>{s.detail}</div>
+                        {s.frameworks?.length > 0 && (
+                          <div style={{ display: 'flex', gap: 4, marginTop: 4, flexWrap: 'wrap' }}>
+                            {s.frameworks.map(f => <span key={f} style={{ fontSize: 10, padding: '1px 6px', background: 'rgba(46,125,50,0.1)', borderRadius: 3, color: 'var(--green)' }}>{f}</span>)}
+                          </div>
+                        )}
                       </div>
                     </div>
                   ))}
@@ -258,18 +306,17 @@ export default function QuestionnaireDetail() {
                       <div key={i} style={{ display: 'flex', gap: 10, marginBottom: 8, padding: '10px 12px', background: severityBg[group.label], borderRadius: 8 }}>
                         <div style={{ width: 6, height: 6, borderRadius: '50%', background: severityColor[group.label], marginTop: 5, flexShrink: 0 }} />
                         <div style={{ flex: 1 }}>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 3, flexWrap: 'wrap' }}>
                             <div style={{ fontSize: 13, fontWeight: 500 }}>{r.title}</div>
                             {r.flagged && <span style={{ fontSize: 10, padding: '2px 6px', background: 'var(--amber)', color: '#fff', borderRadius: 3, fontWeight: 500 }}>Flagged</span>}
-                            {r.control_ref && <span style={{ fontSize: 11, color: 'var(--muted)' }}>{r.control_ref}</span>}
                           </div>
-                          <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.4, marginBottom: r.regulatory_impact ? 6 : 0 }}>{r.detail}</div>
+                          <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.4, marginBottom: r.regulatory_impact ? 6 : 4 }}>{r.detail}</div>
                           {r.regulatory_impact && (
-                            <div style={{ fontSize: 11, color: 'var(--red)', background: '#FCEBEB', padding: '4px 8px', borderRadius: 4, marginBottom: 4 }}>
+                            <div style={{ fontSize: 11, color: 'var(--red)', background: '#FCEBEB', padding: '4px 8px', borderRadius: 4, marginBottom: 6 }}>
                               ⚠ {r.regulatory_impact}
                             </div>
                           )}
-                          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 4 }}>
+                          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
                             {r.iso_ref && <span style={{ fontSize: 10, padding: '1px 6px', background: 'var(--cream2)', borderRadius: 3, color: 'var(--muted)' }}>ISO {r.iso_ref}</span>}
                             {r.nist_ref && <span style={{ fontSize: 10, padding: '1px 6px', background: '#E6F1FB', borderRadius: 3, color: '#185FA5' }}>NIST {r.nist_ref}</span>}
                             {r.cis_ref && <span style={{ fontSize: 10, padding: '1px 6px', background: '#EAF3DE', borderRadius: 3, color: 'var(--green)' }}>CIS {r.cis_ref}</span>}
@@ -286,23 +333,24 @@ export default function QuestionnaireDetail() {
           {q.status === 'completed' && !q.verdict && (
             <div className="card">
               <div style={{ fontSize: 14, fontWeight: 500, marginBottom: 6 }}>Responses received</div>
-              <div style={{ fontSize: 13, color: 'var(--muted)', lineHeight: 1.5, marginBottom: 12 }}>Run the AI evaluation to generate findings, a risk score, and a verdict.</div>
+              <div style={{ fontSize: 13, color: 'var(--muted)', lineHeight: 1.5, marginBottom: 12 }}>
+                Run the AI evaluation to generate findings, a risk score, and a verdict.
+                {orgContext && <span style={{ color: 'var(--green)' }}> Org context will be applied.</span>}
+              </div>
               {error && <div style={{ fontSize: 12, color: 'var(--red)', padding: '8px 12px', background: '#FCEBEB', borderRadius: 6, marginBottom: 12 }}>{error}</div>}
               <button className="btn btn-primary" onClick={runEvaluation} disabled={evaluating}>
-                {evaluating ? <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><span style={{ width: 12, height: 12, border: '2px solid rgba(245,240,232,0.3)', borderTopColor: '#F5F0E8', borderRadius: '50%', animation: 'spin 0.8s linear infinite', display: 'inline-block' }} />Evaluating...</span> : 'Run AI evaluation'}
+                {evaluating
+                  ? <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><span style={{ width: 12, height: 12, border: '2px solid rgba(245,240,232,0.3)', borderTopColor: '#F5F0E8', borderRadius: '50%', animation: 'spin 0.8s linear infinite', display: 'inline-block' }} />Evaluating responses...</span>
+                  : 'Run AI evaluation'}
               </button>
               <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
             </div>
           )}
 
           <div className="card">
-            <div style={{ display: 'flex', gap: 0, marginBottom: 16, borderBottom: '0.5px solid var(--border)' }}>
-              {['evaluation', 'responses'].map(tab => (
-                <button key={tab} onClick={() => setActiveTab(tab)} style={{ padding: '8px 16px', fontSize: 13, background: 'none', border: 'none', cursor: 'pointer', color: activeTab === tab ? 'var(--text)' : 'var(--muted)', fontWeight: activeTab === tab ? 500 : 400, borderBottom: activeTab === tab ? '2px solid var(--brown)' : '2px solid transparent', marginBottom: -1, fontFamily: 'inherit' }}>
-                  {tab === 'evaluation' ? 'Questions' : 'Responses'}
-                </button>
-              ))}
-              <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--muted)', alignSelf: 'center', paddingRight: 4 }}>{questions.length} questions</span>
+            <div className="card-header">
+              <span className="card-title">{responses.length > 0 ? 'Responses' : 'Questions'}</span>
+              <span style={{ fontSize: 12, color: 'var(--muted)' }}>{questions.length} questions</span>
             </div>
             {domains.map(domain => (
               <div key={domain} style={{ marginBottom: 20 }}>
@@ -314,10 +362,15 @@ export default function QuestionnaireDetail() {
                       <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: response?.answer ? 4 : 0, display: 'flex', gap: 8 }}>
                         <span style={{ flexShrink: 0 }}>{qq.order_num}.</span>
                         <span style={{ flex: 1 }}>{qq.question}</span>
-                        <span style={{ opacity: 0.6, flexShrink: 0 }}>{qq.control_ref}</span>
+                      </div>
+                      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginLeft: 20, marginBottom: response?.answer ? 4 : 0 }}>
+                        {qq.control_ref && <span style={{ fontSize: 10, padding: '1px 6px', background: 'var(--cream2)', borderRadius: 3, color: 'var(--muted)' }}>ISO {qq.control_ref}</span>}
+                        {qq.nist_ref && <span style={{ fontSize: 10, padding: '1px 6px', background: '#E6F1FB', borderRadius: 3, color: '#185FA5' }}>NIST {qq.nist_ref}</span>}
+                        {qq.cis_ref && <span style={{ fontSize: 10, padding: '1px 6px', background: '#EAF3DE', borderRadius: 3, color: 'var(--green)' }}>CIS {qq.cis_ref}</span>}
+                        {qq.ce_ref && <span style={{ fontSize: 10, padding: '1px 6px', background: '#FAEEDA', borderRadius: 3, color: 'var(--amber)' }}>{qq.ce_ref}</span>}
                       </div>
                       {response?.answer && (
-                        <div style={{ fontSize: 13, padding: '8px 10px', background: response.flagged ? '#FFF9ED' : 'var(--cream)', borderRadius: 6, lineHeight: 1.5, marginLeft: 16 }}>
+                        <div style={{ fontSize: 13, padding: '8px 10px', background: response.flagged ? '#FFF9ED' : 'var(--cream)', borderRadius: 6, lineHeight: 1.5, marginLeft: 20 }}>
                           {response.answer}
                           {response.flagged && <div style={{ fontSize: 11, color: 'var(--amber)', marginTop: 4 }}>⚠ Flagged for review</div>}
                         </div>
@@ -339,6 +392,16 @@ export default function QuestionnaireDetail() {
             {q.tier_justification && <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.5, marginBottom: 8 }}>{q.tier_justification}</div>}
             <div style={{ fontSize: 12, color: 'var(--muted)' }}>Review cycle: <strong>{tierReview[q.tier]}</strong></div>
           </div>
+
+          {orgContext && (
+            <div className="panel-card" style={{ border: '0.5px solid var(--green)' }}>
+              <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--green)', marginBottom: 8 }}>✦ Org context applied</div>
+              <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.5 }}>
+                All assessments personalised for <strong>{orgContext.company_name || 'your organisation'}</strong>
+                {orgContext.regulatory_frameworks?.length > 0 && ` · ${orgContext.regulatory_frameworks.slice(0, 2).join(', ')}${orgContext.regulatory_frameworks.length > 2 ? ` +${orgContext.regulatory_frameworks.length - 2} more` : ''}`}
+              </div>
+            </div>
+          )}
 
           {certs.length > 0 && (
             <div className="panel-card">
@@ -392,7 +455,9 @@ export default function QuestionnaireDetail() {
               style={{ width: '100%', padding: '10px 12px', border: '0.5px solid rgba(44,31,14,0.25)', borderRadius: 8, fontSize: 13, fontFamily: 'inherit', marginBottom: 16, resize: 'none', outline: 'none' }} />
             <div style={{ display: 'flex', gap: 10 }}>
               <button className="btn" onClick={() => setShowRejectModal(false)} style={{ flex: 1 }}>Cancel</button>
-              <button onClick={handleReject} style={{ flex: 2, padding: '8px', background: 'var(--red)', color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>Confirm rejection</button>
+              <button onClick={handleReject} style={{ flex: 2, padding: '8px', background: 'var(--red)', color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>
+                Confirm rejection
+              </button>
             </div>
           </div>
         </div>

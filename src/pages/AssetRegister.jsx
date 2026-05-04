@@ -26,11 +26,22 @@ export default function AssetRegister() {
   useEffect(() => { fetchAssets() }, [])
 
   async function fetchAssets() {
-    const { data, error } = await supabase.from('assets').select('*').order('tier')
-    if (!error) {
-      setAssets(data.filter(a => !a.deleted_at))
-      setDeletedAssets(data.filter(a => !!a.deleted_at))
-    }
+    // Fetch active assets explicitly
+    const { data: active } = await supabase
+      .from('assets')
+      .select('*')
+      .is('deleted_at', null)
+      .order('tier')
+
+    // Fetch deleted assets explicitly
+    const { data: deleted } = await supabase
+      .from('assets')
+      .select('*')
+      .not('deleted_at', 'is', null)
+      .order('deleted_at', { ascending: false })
+
+    setAssets(active || [])
+    setDeletedAssets(deleted || [])
     setLoading(false)
   }
 
@@ -52,8 +63,7 @@ export default function AssetRegister() {
   if (loading) return <div style={{ padding: '2rem', color: 'var(--muted)' }}>Loading...</div>
 
   const AssetRow = ({ asset, isDeleted = false }) => (
-    <tr className="clickable" onClick={() => navigate(`/assets/${asset.id}`)}
-      style={{ opacity: isDeleted ? 0.6 : 1 }}>
+    <tr className="clickable" onClick={() => navigate(`/assets/${asset.id}`)} style={{ opacity: isDeleted ? 0.65 : 1 }}>
       <td>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <AssetLogo vendorUrl={asset.vendor_url} companyName={asset.company_name} assetName={asset.name} size={30} />
@@ -68,7 +78,7 @@ export default function AssetRegister() {
       </td>
       <td style={{ color: 'var(--muted)' }}>{asset.type}</td>
       <td><span className={`tier-badge t${asset.tier}`}>Tier {asset.tier}</span></td>
-      <td style={{ fontSize: 12, color: isDeleted ? 'var(--muted)' : qStatusColor[asset.questionnaire_status] || 'var(--muted)', textTransform: 'capitalize' }}>
+      <td style={{ fontSize: 12, color: isDeleted ? 'var(--muted)' : (qStatusColor[asset.questionnaire_status] || 'var(--muted)'), textTransform: 'capitalize' }}>
         {isDeleted ? `Deleted ${new Date(asset.deleted_at).toLocaleDateString()}` : (asset.questionnaire_status || 'not sent')}
       </td>
       <td>
@@ -134,19 +144,18 @@ export default function AssetRegister() {
         )}
       </div>
 
-      {/* DELETED ASSETS SECTION */}
       {deletedAssets.length > 0 && (
         <div style={{ marginTop: '1.5rem' }}>
           <button onClick={() => setShowDeleted(!showDeleted)} style={{
             display: 'flex', alignItems: 'center', gap: 8, background: 'none', border: 'none',
             cursor: 'pointer', fontSize: 13, color: 'var(--muted)', fontFamily: 'inherit', marginBottom: 10, padding: 0,
           }}>
-            <span style={{ fontSize: 11, transform: showDeleted ? 'rotate(90deg)' : 'rotate(0)', display: 'inline-block', transition: 'transform 0.15s' }}>▶</span>
+            <span style={{ fontSize: 10, transform: showDeleted ? 'rotate(90deg)' : 'rotate(0)', display: 'inline-block', transition: 'transform 0.15s' }}>▶</span>
             Deleted assets ({deletedAssets.length})
           </button>
 
           {showDeleted && (
-            <div className="card" style={{ opacity: 0.85, border: '0.5px solid rgba(192,57,43,0.2)' }}>
+            <div className="card" style={{ border: '0.5px solid rgba(192,57,43,0.2)' }}>
               <table className="data-table">
                 <thead>
                   <tr><th>Asset</th><th>Type</th><th>Tier</th><th>Deleted</th><th>Reason</th><th>Deleted by</th></tr>

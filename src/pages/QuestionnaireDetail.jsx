@@ -109,7 +109,15 @@ export default function QuestionnaireDetail() {
 
       await supabase.from('questionnaires').update({
         asset_id: assetId, approval_status: 'approved',
-        approved_at: new Date().toISOString(), approved_by: user?.email || 'unknown',
+        approved_at: new Date().toISOString(), approved_by: user?.email || "unknown",
+      }).eq('id', id)
+
+      await supabase.from('asset_audit_log').insert([{
+        asset_id: assetId, asset_name: q.asset_name, action: 'created',
+        performed_by: user?.email || 'unknown',
+        reason: 'Approved from questionnaire evaluation',
+        changes: { tier: q.tier, verdict: q.verdict, score: q.score },
+      }])
       }).eq('id', id)
 
       navigate(`/assets/${assetId}`)

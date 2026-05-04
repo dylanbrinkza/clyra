@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import AddAssetModal from '../components/AddAssetModal'
+import AssetLogo from '../components/AssetLogo'
 
 export default function Dashboard() {
   const navigate = useNavigate()
@@ -9,9 +10,7 @@ export default function Dashboard() {
   const [loading, setLoading] = useState(true)
   const [showAdd, setShowAdd] = useState(false)
 
-  useEffect(() => {
-    fetchAssets()
-  }, [])
+  useEffect(() => { fetchAssets() }, [])
 
   async function fetchAssets() {
     const { data, error } = await supabase.from('assets').select('*').order('tier')
@@ -35,14 +34,7 @@ export default function Dashboard() {
 
   return (
     <>
-      {showAdd && (
-        <AddAssetModal
-          onClose={() => setShowAdd(false)}
-          onAdded={(asset) => {
-            setAssets(prev => [...prev, asset].sort((a, b) => a.tier - b.tier))
-          }}
-        />
-      )}
+      {showAdd && <AddAssetModal onClose={() => setShowAdd(false)} />}
 
       <div className="stat-grid">
         <div className="stat-card"><div className="stat-num">{assets.length}</div><div className="stat-label">Total assets</div></div>
@@ -60,7 +52,12 @@ export default function Dashboard() {
             </div>
             {assets.map(asset => (
               <div key={asset.id} className="asset-row" onClick={() => navigate(`/assets/${asset.id}`)}>
-                <div className={`dot ${asset.rag}`}></div>
+                <AssetLogo
+                  vendorUrl={asset.vendor_url}
+                  companyName={asset.company_name}
+                  assetName={asset.name}
+                  size={28}
+                />
                 <div className="asset-name">{asset.name}</div>
                 <span className={`tier-badge t${asset.tier}`}>Tier {asset.tier}</span>
                 <div className={`asset-status ${statusRag(asset.status)}`}>{asset.status}</div>

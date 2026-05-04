@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import AddAssetModal from '../components/AddAssetModal'
+import AssetLogo from '../components/AssetLogo'
 
 const qStatusColor = {
   'not sent': 'var(--muted)',
@@ -18,6 +19,7 @@ export default function AssetRegister() {
   const [tierFilter, setTierFilter] = useState('all')
   const [statusFilter, setStatusFilter] = useState('all')
   const [typeFilter, setTypeFilter] = useState('all')
+  const [search, setSearch] = useState('')
 
   useEffect(() => { fetchAssets() }, [])
 
@@ -37,6 +39,8 @@ export default function AssetRegister() {
       if (statusFilter === 'submitted' && s !== 'submitted') return false
       if (statusFilter === 'evaluated' && s !== 'evaluated') return false
     }
+    if (search && !a.name?.toLowerCase().includes(search.toLowerCase()) &&
+        !a.company_name?.toLowerCase().includes(search.toLowerCase())) return false
     return true
   })
 
@@ -52,7 +56,13 @@ export default function AssetRegister() {
       </div>
 
       <div className="card">
-        <div className="filter-row">
+        <div className="filter-row" style={{ marginBottom: 12 }}>
+          <input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search assets..."
+            style={{ padding: '6px 10px', border: '0.5px solid rgba(44,31,14,0.2)', borderRadius: 6, fontSize: 13, background: '#fff', outline: 'none', fontFamily: 'inherit', minWidth: 160 }}
+          />
           <select value={tierFilter} onChange={e => setTierFilter(e.target.value)}>
             <option value="all">All tiers</option>
             <option value="1">Tier 1 — Critical</option>
@@ -84,8 +94,18 @@ export default function AssetRegister() {
             {filtered.map(asset => (
               <tr key={asset.id} className="clickable" onClick={() => navigate(`/assets/${asset.id}`)}>
                 <td>
-                  <strong>{asset.name}</strong>
-                  {asset.company_name && <div style={{ fontSize: 11, color: 'var(--muted)' }}>{asset.company_name}</div>}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <AssetLogo
+                      vendorUrl={asset.vendor_url}
+                      companyName={asset.company_name}
+                      assetName={asset.name}
+                      size={30}
+                    />
+                    <div>
+                      <div style={{ fontWeight: 500 }}>{asset.name}</div>
+                      {asset.company_name && <div style={{ fontSize: 11, color: 'var(--muted)' }}>{asset.company_name}</div>}
+                    </div>
+                  </div>
                 </td>
                 <td style={{ color: 'var(--muted)' }}>{asset.type}</td>
                 <td><span className={`tier-badge t${asset.tier}`}>Tier {asset.tier}</span></td>
@@ -105,6 +125,11 @@ export default function AssetRegister() {
             ))}
           </tbody>
         </table>
+        {filtered.length === 0 && (
+          <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--muted)', fontSize: 13 }}>
+            No assets match your filters.
+          </div>
+        )}
       </div>
     </>
   )

@@ -100,7 +100,8 @@ export default function QuestionnaireDetail() {
         last_assessed: new Date().toLocaleDateString(),
         company_name: q.company_name || '', contact_name: q.vendor_name || '',
         contact_email: q.vendor_email || '', contract_reference: q.contract_reference || '',
-        integration_notes: q.integration_notes || '', questionnaire_status: 'evaluated',
+        integration_notes: q.integration_notes || '',
+        vendor_url: q.vendor_url || '', questionnaire_status: 'evaluated',
         certification_status: certs.length > 0 ? 'received' : 'not requested',
         added_by: user?.email || 'unknown',
       }])

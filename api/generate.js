@@ -15,13 +15,13 @@ export default async function handler(req, res) {
   const count = questionCounts[tier] || 15
 
   const certContext = certifications.length > 0
-    ? `The vendor has already provided the following certifications: ${certifications.join(', ')}. For areas well-covered by these certifications, ask targeted follow-up questions to verify scope, currency, and any exceptions — rather than asking basic questions already answered by the cert. Focus deeper questioning on areas NOT covered by these certifications.`
-    : 'No certifications have been provided upfront.'
+    ? `The vendor has provided: ${certifications.join(', ')}. For areas evidenced by these certifications, ask targeted follow-up questions about scope, currency, and exceptions rather than basics. Focus deeper questioning on areas NOT covered.`
+    : 'No certifications provided upfront — question all domains thoroughly.'
 
-  const prompt = `You are a senior information security assessor creating a vendor risk questionnaire.
+  const prompt = `You are a senior information security assessor with expertise in ISO 27001:2022, NIST CSF 2.0, CIS Controls v8, and Cyber Essentials. You are generating a vendor risk questionnaire.
 
 Vendor: ${assetName}
-${vendorUrl ? `Vendor website: ${vendorUrl} — use this to understand what the tool does and tailor questions specifically to its function and risk profile.` : ''}
+${vendorUrl ? `Vendor website: ${vendorUrl} — use this to understand the tool and tailor questions to its specific function and risk profile.` : ''}
 Risk Tier: Tier ${tier}
 Data sensitivity: ${profile.data_sensitivity}
 Network access: ${profile.network_access}
@@ -30,23 +30,30 @@ Criticality: ${profile.criticality}
 
 Certification context: ${certContext}
 
-Generate exactly ${count} security questionnaire questions covering these domains: ${domains.join(', ')}.
+Generate exactly ${count} questions covering these domains: ${domains.join(', ')}.
 
-Requirements:
-- Questions must be specific to this vendor and its actual function — not generic boilerplate
-- Map each question to an ISO 27001:2022 Annex A control reference
-- Include adaptive follow-up triggers where relevant
-- Where certifications have been provided, probe scope/exceptions rather than asking basics
-- Weight questions toward the vendor's specific risk profile and integration depth
+Each question must be mapped to controls across ALL applicable frameworks. For each question provide:
+- The specific domain
+- A clear, vendor-specific question (not generic boilerplate)
+- ISO 27001:2022 Annex A control reference (e.g. A.8.2)
+- NIST CSF 2.0 reference (e.g. PR.AC-01, DE.CM-01)
+- CIS Controls v8 reference (e.g. CIS 5.1, CIS 6.2)
+- Cyber Essentials reference where applicable (e.g. CE: Access Control, CE: Patch Management) or empty string
+- Adaptive follow-up trigger if the answer requires deeper probing
+
+Weight questions toward the vendor's specific risk profile and integration depth. Questions must be specific to this vendor's function, not generic.
 
 Respond ONLY with a JSON array, no other text:
 [
   {
     "domain": "<domain name>",
-    "question": "<the question text>",
-    "control_ref": "<ISO 27001:2022 Annex A reference>",
+    "question": "<specific question text>",
+    "control_ref": "<ISO 27001:2022 ref>",
+    "nist_ref": "<NIST CSF 2.0 ref>",
+    "cis_ref": "<CIS Controls v8 ref>",
+    "ce_ref": "<Cyber Essentials ref or empty string>",
     "order_num": <1, 2, 3...>,
-    "follow_up_trigger": "<condition that triggers a follow-up, or empty string>"
+    "follow_up_trigger": "<condition that triggers follow-up, or empty string>"
   }
 ]`
 

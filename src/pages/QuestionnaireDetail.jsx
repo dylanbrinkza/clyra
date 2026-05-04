@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { getOrgContext } from '../lib/orgContext'
+import { getOrgId } from '../lib/auth'
 
 const verdictColor = { 'Accept': 'var(--green)', 'Accept with conditions': 'var(--amber)', 'Escalate for further review': 'var(--amber)', 'Do not proceed': 'var(--red)' }
 const verdictBg = { 'Accept': '#EAF3DE', 'Accept with conditions': '#FAEEDA', 'Escalate for further review': '#FAEEDA', 'Do not proceed': '#FAECE7' }
@@ -108,6 +109,7 @@ export default function QuestionnaireDetail() {
     setError('')
     try {
       const { data: { user } } = await supabase.auth.getUser()
+      const orgId = await getOrgId()
       const assetId = q.asset_name.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-') + '-' + Date.now()
 
       const { error: assetError } = await supabase.from('assets').insert([{
@@ -128,6 +130,7 @@ export default function QuestionnaireDetail() {
         questionnaire_status: 'evaluated',
         certification_status: certs.length > 0 ? 'received' : 'not requested',
         added_by: user?.email || 'unknown',
+        org_id: orgId,
       }])
       if (assetError) throw new Error(assetError.message)
 
@@ -145,6 +148,7 @@ export default function QuestionnaireDetail() {
         performed_by: user?.email || 'unknown',
         reason: 'Approved from questionnaire evaluation',
         changes: { tier: q.tier, verdict: q.verdict, score: q.score },
+        org_id: orgId,
       }])
 
       navigate(`/assets/${assetId}`)

@@ -1,9 +1,6 @@
 import { supabase } from './supabase'
 
-export async function getCurrentUser() {
-  const { data: { user } } = await supabase.auth.getUser()
-  return user
-}
+let cachedOrgId = null
 
 export async function isSuperAdmin(userId) {
   const { data } = await supabase
@@ -14,18 +11,19 @@ export async function isSuperAdmin(userId) {
   return !!data
 }
 
-export async function getUserOrg(userId) {
+export async function getOrgId() {
+  if (cachedOrgId) return cachedOrgId
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return null
   const { data } = await supabase
     .from('org_memberships')
-    .select('org_id, role, organisations(id, name, slug)')
-    .eq('user_id', userId)
+    .select('org_id')
+    .eq('user_id', user.id)
     .single()
-  return data || null
+  cachedOrgId = data?.org_id || null
+  return cachedOrgId
 }
 
-export async function getOrgId() {
-  const user = await getCurrentUser()
-  if (!user) return null
-  const membership = await getUserOrg(user.id)
-  return membership?.org_id || null
+export function clearOrgIdCache() {
+  cachedOrgId = null
 }

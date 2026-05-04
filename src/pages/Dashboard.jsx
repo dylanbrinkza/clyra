@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import { getOrgId } from '../lib/auth'
 import AddAssetModal from '../components/AddAssetModal'
 import AssetLogo from '../components/AssetLogo'
 
@@ -13,8 +14,14 @@ export default function Dashboard() {
   useEffect(() => { fetchAssets() }, [])
 
   async function fetchAssets() {
-    const { data, error } = await supabase.from('assets').select('*').order('tier')
-    if (!error) setAssets(data)
+    const orgId = await getOrgId()
+    const { data, error } = await supabase
+      .from('assets')
+      .select('*')
+      .eq('org_id', orgId)
+      .is('deleted_at', null)
+      .order('tier')
+    if (!error) setAssets(data || [])
     setLoading(false)
   }
 
@@ -35,14 +42,12 @@ export default function Dashboard() {
   return (
     <>
       {showAdd && <AddAssetModal onClose={() => setShowAdd(false)} />}
-
       <div className="stat-grid">
         <div className="stat-card"><div className="stat-num">{assets.length}</div><div className="stat-label">Total assets</div></div>
         <div className="stat-card"><div className="stat-num red">{red}</div><div className="stat-label">Red — action needed</div></div>
         <div className="stat-card"><div className="stat-num amber">{amber}</div><div className="stat-label">Amber — in review</div></div>
         <div className="stat-card"><div className="stat-num green">{green}</div><div className="stat-label">Green — assured</div></div>
       </div>
-
       <div className="dash-grid">
         <div>
           <div className="card">
@@ -50,14 +55,13 @@ export default function Dashboard() {
               <span className="card-title">Asset register</span>
               <button className="btn btn-primary" onClick={() => setShowAdd(true)}>+ Add asset</button>
             </div>
-            {assets.map(asset => (
+            {assets.length === 0 ? (
+              <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--muted)', fontSize: 13 }}>
+                No assets yet. Add your first vendor to get started.
+              </div>
+            ) : assets.map(asset => (
               <div key={asset.id} className="asset-row" onClick={() => navigate(`/assets/${asset.id}`)}>
-                <AssetLogo
-                  vendorUrl={asset.vendor_url}
-                  companyName={asset.company_name}
-                  assetName={asset.name}
-                  size={28}
-                />
+                <AssetLogo vendorUrl={asset.vendor_url} companyName={asset.company_name} assetName={asset.name} size={28} />
                 <div className="asset-name">{asset.name}</div>
                 <span className={`tier-badge t${asset.tier}`}>Tier {asset.tier}</span>
                 <div className={`asset-status ${statusRag(asset.status)}`}>{asset.status}</div>
@@ -65,26 +69,16 @@ export default function Dashboard() {
             ))}
           </div>
         </div>
-
         <div>
           <div className="panel-card">
-            <div className="panel-label">Active questionnaire</div>
-            <div className="panel-title">Hubspot — security</div>
-            <div className="progress"><div className="progress-bar" style={{ width: '68%' }}></div></div>
-            <div className="panel-sub">Vendor response: 4 days left</div>
+            <div className="panel-label">Quick actions</div>
+            <div className="panel-title" style={{ cursor: 'pointer' }} onClick={() => navigate('/questionnaires/new')}>+ New vendor assessment</div>
+            <div className="panel-sub" style={{ marginTop: 4 }}>Start assessing a vendor with AI</div>
           </div>
           <div className="panel-card">
-            <div className="panel-label">AI complete</div>
-            <div className="panel-title">Slack assessment</div>
-            <div style={{ marginTop: 8 }}>
-              <span className="finding-badge required">1 required</span>{' '}
-              <span className="finding-badge recommended">2 recommended</span>
-            </div>
-          </div>
-          <div className="panel-card dark">
-            <div className="panel-label light">Review due</div>
-            <div className="panel-title">Salesforce — annual</div>
-            <div className="panel-sub light">Due in 12 days</div>
+            <div className="panel-label">Getting started</div>
+            <div className="panel-title">Add vendors to your register</div>
+            <div className="panel-sub" style={{ marginTop: 4 }}>Use the questionnaire flow to assess vendors and build your asset register.</div>
           </div>
         </div>
       </div>

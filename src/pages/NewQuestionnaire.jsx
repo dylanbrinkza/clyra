@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { getOrgContext } from '../lib/orgContext'
+import { getOrgId } from '../lib/auth'
 
 const steps = ['Risk profile', 'Tier assignment', 'Review & send']
 
@@ -146,6 +147,7 @@ export default function NewQuestionnaire() {
     setLoadingMsg('Saving questionnaire...')
     try {
       const { data: { user } } = await supabase.auth.getUser()
+      const orgId = await getOrgId()
 
       const { data: qData, error: qError } = await supabase
         .from('questionnaires')
@@ -164,6 +166,7 @@ export default function NewQuestionnaire() {
           contract_reference: contractRef,
           integration_notes: integrationNotes,
           created_by: user?.email || 'unknown',
+          org_id: orgId,
           ...profile,
           integration_depth: integrationDepths.join(', '),
         }])
@@ -177,7 +180,7 @@ export default function NewQuestionnaire() {
         )
       }
 
-      const questionsToInsert = questions.map(q => ({
+      const questionsToInsert = questions.map(q => ({ org_id: orgId,
         questionnaire_id: qData.id,
         domain: q.domain,
         question: q.question,

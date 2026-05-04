@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { clearOrgContextCache } from '../lib/orgContext'
+import { getOrgId } from '../lib/auth'
 
 const industries = ['Financial Services', 'Healthcare', 'Legal', 'Technology', 'Retail & eCommerce', 'Manufacturing', 'Education', 'Government & Public Sector', 'Professional Services', 'Media & Entertainment', 'Energy & Utilities', 'Other']
 const employeeCounts = ['1–10', '11–50', '51–200', '201–500', '501–1,000', '1,001–5,000', '5,000+']
@@ -82,7 +83,8 @@ export default function OrgContext() {
     setSaving(true)
     setSaved(false)
     const { data: { user } } = await supabase.auth.getUser()
-    const payload = { ...form, user_id: user.id, updated_at: new Date().toISOString() }
+    const orgId = await getOrgId()
+    const payload = { ...form, user_id: user.id, org_id: orgId, updated_at: new Date().toISOString() }
 
     if (contextId) {
       await supabase.from('organisation_context').update(payload).eq('id', contextId)

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import { getOrgId } from '../lib/auth'
 
 const verdictBadge = {
   'Accept': { bg: '#EAF3DE', color: 'var(--green)' },
@@ -16,11 +17,13 @@ export default function Questionnaires() {
 
   useEffect(() => {
     async function fetch() {
+      const orgId = await getOrgId()
       const { data, error } = await supabase
         .from('questionnaires')
         .select('*')
+        .eq('org_id', orgId)
         .order('created_at', { ascending: false })
-      if (!error) setQuestionnaires(data)
+      if (!error) setQuestionnaires(data || [])
       setLoading(false)
     }
     fetch()
@@ -33,19 +36,10 @@ export default function Questionnaires() {
 
   const QRow = ({ q }) => (
     <tr className="clickable" onClick={() => navigate(`/questionnaires/${q.id}`)}>
-      <td>
-        <div style={{ fontWeight: 500 }}>{q.asset_name}</div>
-        {q.vendor_name && <div style={{ fontSize: 11, color: 'var(--muted)' }}>{q.vendor_name}</div>}
-      </td>
+      <td><div style={{ fontWeight: 500 }}>{q.asset_name}</div>{q.vendor_name && <div style={{ fontSize: 11, color: 'var(--muted)' }}>{q.vendor_name}</div>}</td>
       <td><span className={`tier-badge t${q.tier}`}>Tier {q.tier}</span></td>
       <td style={{ fontSize: 12, color: 'var(--muted)', textTransform: 'capitalize' }}>{q.status}</td>
-      <td>
-        {q.verdict ? (
-          <span style={{ fontSize: 11, padding: '3px 8px', borderRadius: 4, fontWeight: 500, background: verdictBadge[q.verdict]?.bg, color: verdictBadge[q.verdict]?.color }}>
-            {q.verdict}
-          </span>
-        ) : <span style={{ color: 'var(--muted)', fontSize: 12 }}>—</span>}
-      </td>
+      <td>{q.verdict ? <span style={{ fontSize: 11, padding: '3px 8px', borderRadius: 4, fontWeight: 500, background: verdictBadge[q.verdict]?.bg, color: verdictBadge[q.verdict]?.color }}>{q.verdict}</span> : <span style={{ color: 'var(--muted)', fontSize: 12 }}>—</span>}</td>
       <td>
         {q.approval_status === 'approved' && <span style={{ fontSize: 11, color: 'var(--green)', fontWeight: 500 }}>Approved</span>}
         {q.approval_status === 'rejected' && <span style={{ fontSize: 11, color: 'var(--red)', fontWeight: 500 }}>Rejected</span>}
@@ -62,45 +56,23 @@ export default function Questionnaires() {
         <h2>Questionnaires</h2>
         <button className="btn btn-primary" onClick={() => navigate('/questionnaires/new')}>+ New questionnaire</button>
       </div>
-
       {pendingApproval.length > 0 && (
         <div style={{ marginBottom: '1.5rem' }}>
-          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--amber)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>
-            ● Pending your approval — {pendingApproval.length}
-          </div>
+          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--amber)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10 }}>● Pending your approval — {pendingApproval.length}</div>
           <div className="card" style={{ border: '1px solid #F0D080' }}>
-            <table className="data-table">
-              <thead>
-                <tr><th>Vendor</th><th>Tier</th><th>Status</th><th>Verdict</th><th>Approval</th><th>Created</th></tr>
-              </thead>
-              <tbody>
-                {pendingApproval.map(q => <QRow key={q.id} q={q} />)}
-              </tbody>
-            </table>
+            <table className="data-table"><thead><tr><th>Vendor</th><th>Tier</th><th>Status</th><th>Verdict</th><th>Approval</th><th>Created</th></tr></thead>
+            <tbody>{pendingApproval.map(q => <QRow key={q.id} q={q} />)}</tbody></table>
           </div>
         </div>
       )}
-
-      {others.length > 0 && (
+      {others.length > 0 ? (
         <div className="card">
-          {pendingApproval.length > 0 && (
-            <div style={{ fontSize: 12, fontWeight: 500, color: 'var(--muted)', marginBottom: 12 }}>All questionnaires</div>
-          )}
-          <table className="data-table">
-            <thead>
-              <tr><th>Vendor</th><th>Tier</th><th>Status</th><th>Verdict</th><th>Approval</th><th>Created</th></tr>
-            </thead>
-            <tbody>
-              {others.map(q => <QRow key={q.id} q={q} />)}
-            </tbody>
-          </table>
+          <table className="data-table"><thead><tr><th>Vendor</th><th>Tier</th><th>Status</th><th>Verdict</th><th>Approval</th><th>Created</th></tr></thead>
+          <tbody>{others.map(q => <QRow key={q.id} q={q} />)}</tbody></table>
         </div>
-      )}
-
-      {questionnaires.length === 0 && (
+      ) : questionnaires.length === 0 && (
         <div className="card" style={{ textAlign: 'center', padding: '3rem', color: 'var(--muted)' }}>
           <div style={{ fontSize: 14, marginBottom: 8 }}>No questionnaires yet</div>
-          <div style={{ fontSize: 13, marginBottom: 20 }}>Create your first vendor risk questionnaire to get started.</div>
           <button className="btn btn-primary" onClick={() => navigate('/questionnaires/new')}>+ New questionnaire</button>
         </div>
       )}

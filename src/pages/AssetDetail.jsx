@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
+import { getOrgId } from '../lib/auth'
 import AssetLogo from '../components/AssetLogo'
 
 const severityColor = { red: 'var(--red)', amber: 'var(--amber)', gray: '#aaa', green: 'var(--green)' }
@@ -37,6 +38,7 @@ export default function AssetDetail() {
       supabase.from('assurance').select('*').eq('asset_id', id),
       supabase.from('questionnaires').select('*').eq('asset_id', id).order('created_at', { ascending: false }),
       supabase.from('asset_audit_log').select('*').eq('asset_id', id).order('created_at', { ascending: false }),
+
     ])
     if (!assetRes.error) setAsset(assetRes.data)
     if (!contactsRes.error) setContacts(contactsRes.data)
@@ -61,6 +63,7 @@ export default function AssetDetail() {
       }).eq('id', id)
 
       // Audit log
+      const orgId = await getOrgId()
       await supabase.from('asset_audit_log').insert([{
         asset_id: id,
         asset_name: asset.name,
@@ -68,6 +71,7 @@ export default function AssetDetail() {
         performed_by: user?.email || 'unknown',
         reason: deleteReason,
         changes: { name: asset.name, tier: asset.tier, type: asset.type },
+        org_id: orgId,
       }])
 
       navigate('/assets')

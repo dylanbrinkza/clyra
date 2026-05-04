@@ -26,7 +26,7 @@ const MultiSelect = ({ options, selected, onChange }) => (
   </div>
 )
 
-export default function Onboarding() {
+export default function Onboarding({ onComplete, setOnboardingComplete }) {
   const navigate = useNavigate()
   const [step, setStep] = useState(0)
   const [saving, setSaving] = useState(false)
@@ -121,8 +121,10 @@ export default function Onboarding() {
       await supabase.from('organisation_context')
         .update({ onboarding_complete: true, org_id: orgId })
         .eq('user_id', user.id)
+      if (onComplete) onComplete()
       navigate('/dashboard')
     } catch (err) {
+      if (onComplete) onComplete()
       navigate('/dashboard')
     }
     setSaving(false)
@@ -312,6 +314,7 @@ export default function Onboarding() {
                         await supabase.from('organisation_context').insert([payload])
                       }
                       clearOrgContextCache()
+                      if (setOnboardingComplete) setOnboardingComplete(true)
                     } catch (err) { console.error(err) }
                     setSaving(false)
                     navigate('/questionnaires/new')

@@ -105,14 +105,14 @@ export default function App() {
         !session ? <Navigate to="/login" replace /> :
         userRole === 'superadmin' ? <Navigate to="/admin" replace /> :
         onboardingComplete ? <Navigate to="/dashboard" replace /> :
-        <Onboarding onComplete={() => setOnboardingComplete(true)} />
+        <Onboarding onComplete={() => setOnboardingComplete(true)} setOnboardingComplete={setOnboardingComplete} />
       } />
 
       {/* Main app */}
       <Route path="/" element={
         !session ? <Navigate to="/login" replace /> :
         userRole === 'superadmin' ? <Navigate to="/admin" replace /> :
-        !onboardingComplete ? <Navigate to="/welcome" replace /> :
+        onboardingComplete === false ? <Navigate to="/welcome" replace /> :
         <Layout session={session} />
       }>
         <Route index element={<Navigate to="/dashboard" replace />} />

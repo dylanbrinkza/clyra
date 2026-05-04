@@ -30,7 +30,8 @@ export default function Onboarding() {
   const navigate = useNavigate()
   const [step, setStep] = useState(0)
   const [saving, setSaving] = useState(false)
-  const [assetMode, setAssetMode] = useState(null) // 'full' | 'basic' | null
+  const [error, setError] = useState('')
+  const [assetMode, setAssetMode] = useState(null)
 
   const [org, setOrg] = useState({
     company_name: '', industry: '', employee_count: '', countries: [],
@@ -47,40 +48,84 @@ export default function Onboarding() {
   const setOrgField = (k, v) => setOrg(p => ({ ...p, [k]: v }))
   const setAssetField = (k, v) => setAsset(p => ({ ...p, [k]: v }))
 
+  // Get user's org_id helper
+  async function getUserOrgId() {
+    const { data: { user } } = await supabase.auth.getUser()
+    const { data: membership } = await supabase
+      .from('org_memberships').select('org_id').eq('user_id', user.id).single()
+    return { user, orgId: membership?.org_id || null }
+  }
+
   const saveOrg = async () => {
     setSaving(true)
-    const { data: { user } } = await supabase.auth.getUser()
-    await supabase.from('organisation_context').upsert([{ ...org, user_id: user.id, updated_at: new Date().toISOString() }], { onConflict: 'user_id' })
-    clearOrgContextCache()
+    setError('')
+    try {
+      const { user, orgId } = await getUserOrgId()
+      const payload = { ...org, user_id: user.id, org_id: orgId, updated_at: new Date().toISOString() }
+
+      // Check if record already exists
+      const { data: existing } = await supabase
+        .from('organisation_context').select('id').eq('user_id', user.id).single()
+
+      let result
+      if (existing) {
+        result = await supabase.from('organisation_context').update(payload).eq('user_id', user.id)
+      } else {
+        result = await supabase.from('organisation_context').insert([payload])
+      }
+
+      if (result.error) throw result.error
+      clearOrgContextCache()
+      setStep(2)
+    } catch (err) {
+      console.error('saveOrg error:', err)
+      setError('Failed to save: ' + err.message)
+    }
     setSaving(false)
-    setStep(2)
   }
 
   const saveBasicAsset = async () => {
     setSaving(true)
-    const { data: { user } } = await supabase.auth.getUser()
-    const assetId = asset.name.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-') + '-' + Date.now()
-    await supabase.from('assets').insert([{
-      id: assetId, name: asset.name, type: asset.type,
-      company_name: asset.company_name, vendor_url: asset.vendor_url,
-      contact_name: asset.contact_name, contact_email: asset.contact_email,
-      tier: 2, rag: 'amber', score: 50, status: 'Not assessed',
-      last_assessed: 'Pending', questionnaire_status: 'not sent',
-      certification_status: 'not requested', added_by: user?.email || 'unknown',
-    }])
-    await supabase.from('asset_audit_log').insert([{
-      asset_id: assetId, asset_name: asset.name, action: 'created',
-      performed_by: user?.email || 'unknown', reason: 'Added during onboarding',
-    }])
+    setError('')
+    try {
+      const { user, orgId } = await getUserOrgId()
+      const assetId = asset.name.toLowerCase().replace(/[^a-z0-9]/g, '-').replace(/-+/g, '-') + '-' + Date.now()
+
+      const { error: assetErr } = await supabase.from('assets').insert([{
+        id: assetId, name: asset.name, type: asset.type,
+        company_name: asset.company_name, vendor_url: asset.vendor_url,
+        contact_name: asset.contact_name, contact_email: asset.contact_email,
+        tier: 2, rag: 'amber', score: 50, status: 'Not assessed',
+        last_assessed: 'Pending', questionnaire_status: 'not sent',
+        certification_status: 'not requested', added_by: user?.email || 'unknown',
+        org_id: orgId,
+      }])
+      if (assetErr) throw assetErr
+
+      await supabase.from('asset_audit_log').insert([{
+        asset_id: assetId, asset_name: asset.name, action: 'created',
+        performed_by: user?.email || 'unknown', reason: 'Added during onboarding',
+        org_id: orgId,
+      }])
+      setStep(3)
+    } catch (err) {
+      setError('Failed to save asset: ' + err.message)
+    }
     setSaving(false)
-    setStep(3)
   }
 
   const markComplete = async () => {
-    const { data: { user } } = await supabase.auth.getUser()
-    const { data: membership } = await supabase.from("org_memberships").select("org_id").eq("user_id", user.id).single()
-    await supabase.from("organisation_context").update({ onboarding_complete: true, org_id: membership?.org_id || null }).eq("user_id", user.id)
-    navigate("/dashboard")
+    setSaving(true)
+    try {
+      const { user, orgId } = await getUserOrgId()
+      await supabase.from('organisation_context')
+        .update({ onboarding_complete: true, org_id: orgId })
+        .eq('user_id', user.id)
+      navigate('/dashboard')
+    } catch (err) {
+      navigate('/dashboard')
+    }
+    setSaving(false)
   }
 
   const steps = ['Welcome', 'Your organisation', 'First asset', 'All set']
@@ -88,7 +133,6 @@ export default function Onboarding() {
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--cream)', display: 'flex', flex: 1 }}>
-
       {/* Left panel */}
       <div style={{ width: 280, background: 'var(--brown)', color: '#F5F0E8', padding: '3rem 2rem', display: 'flex', flexDirection: 'column', flexShrink: 0 }}>
         <div style={{ fontSize: 22, fontWeight: 500, marginBottom: '3rem' }}>Cly<em style={{ fontStyle: 'italic', color: '#D4A97A' }}>ra</em></div>
@@ -118,7 +162,7 @@ export default function Onboarding() {
       </div>
 
       {/* Right panel */}
-      <div style={{ flex: 1, overflowY: 'auto', padding: '3rem 3rem' }}>
+      <div style={{ flex: 1, overflowY: 'auto', padding: '3rem' }}>
         <div style={{ maxWidth: 640, margin: '0 auto' }}>
 
           {/* STEP 0 — WELCOME */}
@@ -233,6 +277,8 @@ export default function Onboarding() {
                   rows={3} style={{ ...inputStyle, resize: 'vertical' }} />
               </div>
 
+              {error && <div style={{ fontSize: 12, color: 'var(--red)', padding: '8px 12px', background: '#FCEBEB', borderRadius: 6, marginBottom: 12 }}>{error}</div>}
+
               <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
                 <button className="btn" onClick={() => setStep(0)}>← Back</button>
                 <button className="btn btn-primary" onClick={saveOrg} disabled={saving || !orgComplete} style={{ flex: 1 }}>
@@ -248,31 +294,43 @@ export default function Onboarding() {
             <div>
               <div style={{ fontSize: 24, fontWeight: 500, marginBottom: 8 }}>Register your first asset</div>
               <div style={{ fontSize: 14, color: 'var(--muted)', marginBottom: '2rem', lineHeight: 1.6 }}>
-                Add the first vendor or tool you want to assess. You can do a full AI-powered vendor assessment now, or just capture the basic details and assess it later.
+                Add the first vendor or tool you want to assess.
               </div>
 
               {assetMode === null && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: '2rem' }}>
-                  <div onClick={() => { setAssetMode('full'); navigate('/questionnaires/new') }}
-                    style={{ padding: '1.5rem', background: '#fff', border: '1.5px solid var(--orange)', borderRadius: 12, cursor: 'pointer', transition: 'all 0.15s' }}>
+                  <div onClick={async () => {
+                    // Save onboarding progress first so wizard doesn't reset
+                    setSaving(true)
+                    try {
+                      const { user, orgId } = await getUserOrgId()
+                      const { data: existing } = await supabase.from('organisation_context').select('id').eq('user_id', user.id).single()
+                      if (!existing) {
+                        await supabase.from('organisation_context').insert([{ user_id: user.id, org_id: orgId, onboarding_complete: false }])
+                      }
+                    } catch {}
+                    setSaving(false)
+                    navigate('/questionnaires/new?from=onboarding')
+                  }}
+                    style={{ padding: '1.5rem', background: '#fff', border: '1.5px solid var(--orange)', borderRadius: 12, cursor: 'pointer' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
                       <div style={{ width: 36, height: 36, borderRadius: 8, background: '#FFF7F2', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>✦</div>
                       <div style={{ fontSize: 14, fontWeight: 500 }}>Start a full vendor assessment</div>
                       <span style={{ marginLeft: 'auto', fontSize: 11, padding: '2px 8px', background: '#FFF7F2', color: 'var(--orange)', borderRadius: 12, fontWeight: 500 }}>Recommended</span>
                     </div>
                     <div style={{ fontSize: 13, color: 'var(--muted)', lineHeight: 1.6 }}>
-                      Claude will analyse the vendor's risk profile, generate a tailored questionnaire, and produce a full security assessment with findings mapped to ISO 27001, NIST CSF, CIS Controls, and Cyber Essentials — all personalised to your organisation.
+                      Claude will analyse the vendor's risk profile, generate a tailored questionnaire, and produce a full security assessment personalised to your organisation.
                     </div>
                   </div>
 
                   <div onClick={() => setAssetMode('basic')}
-                    style={{ padding: '1.5rem', background: '#fff', border: '0.5px solid var(--border)', borderRadius: 12, cursor: 'pointer', transition: 'all 0.15s' }}>
+                    style={{ padding: '1.5rem', background: '#fff', border: '0.5px solid var(--border)', borderRadius: 12, cursor: 'pointer' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
                       <div style={{ width: 36, height: 36, borderRadius: 8, background: 'var(--cream2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18 }}>+</div>
                       <div style={{ fontSize: 14, fontWeight: 500 }}>Add basic details and assess later</div>
                     </div>
                     <div style={{ fontSize: 13, color: 'var(--muted)', lineHeight: 1.6 }}>
-                      Just capture the vendor name and type for now. You can start the full assessment from the asset register whenever you're ready.
+                      Just capture the vendor name and type for now. Start the full assessment from the asset register whenever you're ready.
                     </div>
                   </div>
 
@@ -316,6 +374,7 @@ export default function Onboarding() {
                       <input type="email" value={asset.contact_email} onChange={e => setAssetField('contact_email', e.target.value)} placeholder="jane@vendor.com" style={inputStyle} />
                     </div>
                   </div>
+                  {error && <div style={{ fontSize: 12, color: 'var(--red)', padding: '8px 12px', background: '#FCEBEB', borderRadius: 6, marginBottom: 16 }}>{error}</div>}
                   <div style={{ display: 'flex', gap: 10 }}>
                     <button className="btn" onClick={() => setAssetMode(null)}>← Back</button>
                     <button className="btn btn-primary" onClick={saveBasicAsset} disabled={saving || !asset.name} style={{ flex: 1 }}>
@@ -333,9 +392,8 @@ export default function Onboarding() {
               <div style={{ width: 64, height: 64, borderRadius: '50%', background: '#EAF3DE', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 24px', fontSize: 28 }}>✓</div>
               <div style={{ fontSize: 26, fontWeight: 500, marginBottom: 12 }}>You're all set</div>
               <div style={{ fontSize: 14, color: 'var(--muted)', lineHeight: 1.7, marginBottom: '2rem', maxWidth: 480, margin: '0 auto 2rem' }}>
-                Clyra is ready. Your organisation context is saved and will personalise every assessment going forward. Head to the dashboard to start assessing vendors and building your asset register.
+                Clyra is ready. Your organisation context is saved and will personalise every assessment going forward.
               </div>
-
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: '2rem', textAlign: 'left' }}>
                 {[
                   ['Questionnaires', 'Send your first vendor assessment', '/questionnaires/new'],
@@ -349,9 +407,8 @@ export default function Onboarding() {
                   </div>
                 ))}
               </div>
-
-              <button className="btn btn-primary" style={{ padding: '12px 36px', fontSize: 14 }} onClick={markComplete}>
-                Go to dashboard →
+              <button className="btn btn-primary" style={{ padding: '12px 36px', fontSize: 14 }} onClick={markComplete} disabled={saving}>
+                {saving ? 'Setting up...' : 'Go to dashboard →'}
               </button>
             </div>
           )}
@@ -359,6 +416,13 @@ export default function Onboarding() {
       </div>
     </div>
   )
+
+  async function getUserOrgId() {
+    const { data: { user } } = await supabase.auth.getUser()
+    const { data: membership } = await supabase
+      .from('org_memberships').select('org_id').eq('user_id', user.id).single()
+    return { user, orgId: membership?.org_id || null }
+  }
 }
 
 const labelStyle = { fontSize: 12, fontWeight: 500, color: 'var(--muted)', display: 'block', marginBottom: 6 }

@@ -78,8 +78,9 @@ export default function Onboarding() {
 
   const markComplete = async () => {
     const { data: { user } } = await supabase.auth.getUser()
-    await supabase.from('organisation_context').update({ onboarding_complete: true }).eq('user_id', user.id)
-    navigate('/dashboard')
+    const { data: membership } = await supabase.from("org_memberships").select("org_id").eq("user_id", user.id).single()
+    await supabase.from("organisation_context").update({ onboarding_complete: true, org_id: membership?.org_id || null }).eq("user_id", user.id)
+    navigate("/dashboard")
   }
 
   const steps = ['Welcome', 'Your organisation', 'First asset', 'All set']

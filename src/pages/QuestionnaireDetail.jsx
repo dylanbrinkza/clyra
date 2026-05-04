@@ -118,7 +118,6 @@ export default function QuestionnaireDetail() {
         reason: 'Approved from questionnaire evaluation',
         changes: { tier: q.tier, verdict: q.verdict, score: q.score },
       }])
-      }).eq('id', id)
 
       navigate(`/assets/${assetId}`)
     } catch (err) {

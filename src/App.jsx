@@ -14,6 +14,7 @@ import Certifications from './pages/Certifications'
 import RiskRegister from './pages/RiskRegister'
 import Incidents from './pages/Incidents'
 import IncidentDetail from './pages/IncidentDetail'
+import AuditLog from './pages/AuditLog'
 
 function ProtectedRoute({ children, session }) {
   if (!session) return <Navigate to="/login" replace />
@@ -55,6 +56,7 @@ export default function App() {
         <Route path="risk" element={<RiskRegister />} />
         <Route path="incidents" element={<Incidents />} />
         <Route path="incidents/:id" element={<IncidentDetail />} />
+        <Route path="audit" element={<AuditLog />} />
       </Route>
     </Routes>
   )

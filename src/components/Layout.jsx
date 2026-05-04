@@ -85,11 +85,20 @@ export default function Layout({ session }) {
             }>Incidents</SidebarItem>
           </div>
 
+          <div className="sidebar-section">
+            <div className="sidebar-label">Admin</div>
+            <SidebarItem to="/audit" icon={
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <path d="M3 4h10M3 8h10M3 12h6"/><circle cx="13" cy="12" r="2"/>
+              </svg>
+            }>Audit log</SidebarItem>
+          </div>
+
           <div style={{ position: 'absolute', bottom: '1.5rem', left: 0, width: 210, padding: '0 1.25rem' }}>
             <button onClick={handleSignOut} style={{
               width: '100%', padding: '7px 0', fontSize: 12, color: 'var(--muted)',
               background: 'none', border: '0.5px solid var(--border)', borderRadius: 6,
-              cursor: 'pointer', fontFamily: 'inherit'
+              cursor: 'pointer', fontFamily: 'inherit',
             }}>
               Sign out
             </button>

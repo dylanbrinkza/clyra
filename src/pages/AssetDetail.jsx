@@ -87,7 +87,7 @@ export default function AssetDetail() {
   const tabs = [
     { key: 'overview', label: 'Overview' },
     { key: 'questionnaires', label: `Questionnaires${questionnaires.length ? ` (${questionnaires.length})` : ''}` },
-    { key: 'audit', label: `Audit log${auditLog.length ? ` (${auditLog.length})` : ''}` },
+    
   ]
 
   return (

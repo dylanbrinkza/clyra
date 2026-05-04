@@ -87,6 +87,11 @@ export default function Layout({ session }) {
 
           <div className="sidebar-section">
             <div className="sidebar-label">Admin</div>
+            <SidebarItem to="/org-context" icon={
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
+                <rect x="2" y="2" width="12" height="8" rx="1"/><path d="M5 14h6M8 10v4"/>
+              </svg>
+            }>Organisation</SidebarItem>
             <SidebarItem to="/audit" icon={
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5">
                 <path d="M3 4h10M3 8h10M3 12h6"/><circle cx="13" cy="12" r="2"/>

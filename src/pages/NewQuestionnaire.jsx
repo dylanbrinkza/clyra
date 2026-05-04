@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 
@@ -57,6 +57,16 @@ export default function NewQuestionnaire() {
   const [questions, setQuestions] = useState([])
   const [loading, setLoading] = useState(false)
   const [loadingMsg, setLoadingMsg] = useState('')
+  const [orgContext, setOrgContext] = useState(null)
+
+  useEffect(() => {
+    async function loadOrgContext() {
+      const { data: { user } } = await supabase.auth.getUser()
+      const { data } = await supabase.from('organisation_context').select('*').eq('user_id', user.id).single()
+      if (data) setOrgContext(data)
+    }
+    loadOrgContext()
+  }, [])
   const [error, setError] = useState('')
 
   const toggleIntegration = (opt) => {

@@ -3,7 +3,7 @@ export const config = { maxDuration: 60 }
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
-  const { assetName, tier, profile, questions, responses } = req.body
+  const { assetName, tier, profile, questions, responses, orgContext } = req.body
 
   const qaPairs = questions.map((q, i) => ({
     domain: q.domain,
@@ -15,63 +15,68 @@ export default async function handler(req, res) {
     answer: responses[i]?.answer || 'No answer provided',
   }))
 
-  const prompt = `You are a senior information security assessor with deep expertise across ISO 27001:2022, NIST CSF 2.0, CIS Controls v8, and Cyber Essentials. You are evaluating a completed vendor risk questionnaire.
+  const orgSection = orgContext ? `
+ORGANISATION CONTEXT (frame all findings against this):
+- Company: ${orgContext.company_name || 'Not specified'} | Industry: ${orgContext.industry || 'Not specified'}
+- Regulatory frameworks: ${orgContext.regulatory_frameworks?.join(', ') || 'Not specified'}
+- Data held: ${orgContext.data_types?.join(', ') || 'Not specified'} | Special category: ${orgContext.special_category_data ? 'Yes' : 'No'}
+- Data subjects: ${orgContext.data_subject_count || 'Not specified'}
+- Own certifications: ${orgContext.existing_certifications?.join(', ') || 'None'}
+- Risk appetite: ${orgContext.risk_appetite || 'Not specified'}
+- Compliance notes: ${orgContext.compliance_notes || 'None'}
 
-Vendor: ${assetName}
-Risk Tier: Tier ${tier} (${tier === 1 ? 'Critical' : tier === 2 ? 'High' : tier === 3 ? 'Medium' : 'Low'})
-Data sensitivity: ${profile.data_sensitivity}
-Network access: ${profile.network_access}
-Integration depth: ${profile.integration_depth || 'Not specified'}
-Criticality: ${profile.criticality}
+Frame every finding in terms of the actual regulatory and business risk to THIS organisation:
+- If GDPR regulated: frame data protection gaps as Article 28/32 compliance risks with ICO enforcement exposure
+- If FCA regulated: frame relevant gaps as SYSC/DORA obligations
+- If NHS/health sector: frame as DSP Toolkit and CQC obligations
+- If they hold special category data: elevate severity of any data protection gap
+- Calibrate severity against their stated risk appetite — a low risk appetite means Recommended items become more urgent
+` : 'No organisation context — assess against general best practice.'
 
-Questionnaire responses:
-${qaPairs.map((qa) => `[${qa.domain}]
-Controls: ISO ${qa.control_ref}${qa.nist_ref ? ` | NIST ${qa.nist_ref}` : ''}${qa.cis_ref ? ` | CIS ${qa.cis_ref}` : ''}${qa.ce_ref ? ` | ${qa.ce_ref}` : ''}
+  const prompt = `You are a senior information security assessor with expertise in ISO 27001:2022, NIST CSF 2.0, CIS Controls v8, and Cyber Essentials.
+${orgSection}
+VENDOR ASSESSED: ${assetName} | Tier ${tier} (${tier === 1 ? 'Critical' : tier === 2 ? 'High' : tier === 3 ? 'Medium' : 'Low'})
+Profile: Data sensitivity: ${profile.data_sensitivity} | Network: ${profile.network_access} | Criticality: ${profile.criticality}
+
+RESPONSES:
+${qaPairs.map(qa => `[${qa.domain} | ISO:${qa.control_ref}${qa.nist_ref ? ` NIST:${qa.nist_ref}` : ''}${qa.cis_ref ? ` CIS:${qa.cis_ref}` : ''}${qa.ce_ref ? ` CE:${qa.ce_ref}` : ''}]
 Q: ${qa.question}
 A: ${qa.answer}`).join('\n\n')}
 
-Evaluate these responses rigorously against ALL four frameworks:
-
-1. ISO 27001:2022 — Are controls adequate for the Annex A requirements relevant to this vendor's tier and data handling?
-2. NIST CSF 2.0 — Are the Govern, Identify, Protect, Detect, Respond, Recover functions adequately addressed?
-3. CIS Controls v8 — Do responses demonstrate the Implementation Group controls appropriate to this tier?
-4. Cyber Essentials — Are the five key areas (boundary firewalls, secure configuration, access control, malware protection, patch management) adequately evidenced?
-
-For each finding, identify which framework(s) the gap relates to. Flag any answers that are evasive, vague, contradictory, or implausible given the vendor's stated profile.
-
-The verdict must reflect the combined view across all frameworks — a vendor may pass ISO 27001 requirements but fail NIST CSF Respond function, which should affect the verdict.
+Evaluate rigorously across all four frameworks AND against the organisation's specific regulatory context. The verdict must reflect the combined view — a gap that is merely a best practice issue in isolation may be a compliance breach for this specific organisation.
 
 Respond ONLY with a JSON object, no other text:
 {
   "score": <0-100, higher = more risk>,
   "verdict": "<Accept | Accept with conditions | Escalate for further review | Do not proceed>",
-  "summary": "<3-4 sentence plain English summary of the vendor's security posture across all four frameworks>",
+  "summary": "<3-4 sentences summarising posture across all frameworks AND what this means specifically for this organisation's regulatory position>",
   "framework_assessment": {
-    "iso27001": "<1-2 sentence assessment of ISO 27001 posture>",
-    "nist_csf": "<1-2 sentence assessment of NIST CSF posture>",
-    "cis": "<1-2 sentence assessment of CIS Controls posture>",
-    "cyber_essentials": "<1-2 sentence assessment of Cyber Essentials posture>"
+    "iso27001": "<assessment of ISO 27001 posture>",
+    "nist_csf": "<assessment of NIST CSF posture>",
+    "cis": "<assessment of CIS Controls posture>",
+    "cyber_essentials": "<assessment of Cyber Essentials posture>"
   },
   "strengths": [
     {
-      "title": "<short strength title>",
-      "detail": "<1-2 sentence explanation>",
+      "title": "<strength title>",
+      "detail": "<explanation including which framework this satisfies>",
       "frameworks": ["<ISO 27001 | NIST CSF | CIS Controls | Cyber Essentials>"]
     }
   ],
   "recommendations": [
     {
       "severity": "<Required | Recommended | Advisory>",
-      "title": "<short recommendation title>",
-      "detail": "<specific actionable recommendation>",
-      "iso_ref": "<ISO 27001:2022 Annex A reference>",
-      "nist_ref": "<NIST CSF 2.0 reference>",
-      "cis_ref": "<CIS Controls v8 reference>",
-      "ce_ref": "<Cyber Essentials reference or empty string>",
-      "flagged": <true if answer was evasive or vague>
+      "title": "<recommendation title>",
+      "detail": "<specific actionable recommendation framed in terms of this organisation's regulatory obligations where applicable>",
+      "iso_ref": "<ISO 27001:2022 ref>",
+      "nist_ref": "<NIST CSF 2.0 ref>",
+      "cis_ref": "<CIS Controls v8 ref>",
+      "ce_ref": "<Cyber Essentials ref or empty>",
+      "regulatory_impact": "<specific regulatory impact for this organisation e.g. 'GDPR Article 32 breach risk' or empty if not applicable>",
+      "flagged": <true if answer was evasive/vague/implausible>
     }
   ],
-  "flagged_responses": [<0-indexed question numbers with evasive/vague/implausible answers>]
+  "flagged_responses": [<0-indexed question numbers>]
 }`
 
   try {
@@ -83,14 +88,12 @@ Respond ONLY with a JSON object, no other text:
     const data = await response.json()
     if (!response.ok) return res.status(500).json({ error: data.error?.message || 'API error' })
     const evaluation = JSON.parse(data.content[0].text.replace(/```json|```/g, '').trim())
-
     evaluation.findings = evaluation.recommendations?.map(r => ({
       severity: r.severity?.toLowerCase() === 'required' ? 'red' : r.severity?.toLowerCase() === 'recommended' ? 'amber' : 'gray',
       text: r.detail,
       label: r.severity,
       flagged: r.flagged,
     })) || []
-
     return res.status(200).json(evaluation)
   } catch (err) {
     return res.status(500).json({ error: err.message })

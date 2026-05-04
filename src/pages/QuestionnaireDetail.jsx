@@ -23,11 +23,20 @@ export default function QuestionnaireDetail() {
   const [approving, setApproving] = useState(false)
   const [showRejectModal, setShowRejectModal] = useState(false)
   const [rejectionReason, setRejectionReason] = useState('')
+  const [orgContext, setOrgContext] = useState(null)
   const [copied, setCopied] = useState(false)
   const [error, setError] = useState('')
   const [activeTab, setActiveTab] = useState('evaluation')
 
-  useEffect(() => { fetchAll() }, [id])
+  useEffect(() => {
+    fetchAll()
+    async function loadOrg() {
+      const { data: { user } } = await supabase.auth.getUser()
+      const { data } = await supabase.from('organisation_context').select('*').eq('user_id', user.id).single()
+      if (data) setOrgContext(data)
+    }
+    loadOrg()
+  }, [id])
 
   async function fetchAll() {
     const [qRes, qqRes, certRes] = await Promise.all([
@@ -53,7 +62,7 @@ export default function QuestionnaireDetail() {
       const res = await fetch('/api/evaluate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
+        body: JSON.stringify({ orgContext,
           assetName: q.asset_name, tier: q.tier,
           profile: { data_sensitivity: q.data_sensitivity, network_access: q.network_access, integration_depth: q.integration_depth, criticality: q.criticality },
           questions, responses: allResponses,
@@ -64,6 +73,7 @@ export default function QuestionnaireDetail() {
 
       await supabase.from('questionnaires').update({
         verdict: evaluation.verdict,
+        framework_assessment: evaluation.framework_assessment,
         score: evaluation.score,
         summary: evaluation.summary,
         strengths: evaluation.strengths,
@@ -218,7 +228,7 @@ export default function QuestionnaireDetail() {
                   </div>
                 </>}
               </div>
-              {q.summary && <p style={{ fontSize: 13, color: 'var(--muted)', lineHeight: 1.6, marginBottom: recommendations.length > 0 || strengths.length > 0 ? 16 : 0 }}>{q.summary}</p>}
+              {q.summary && <p style={{ fontSize: 13, color: "var(--muted)", lineHeight: 1.6, marginBottom: 16 }}>{q.summary}</p>}
 
               {strengths.length > 0 && (
                 <div style={{ marginBottom: 16 }}>
@@ -253,7 +263,18 @@ export default function QuestionnaireDetail() {
                             {r.flagged && <span style={{ fontSize: 10, padding: '2px 6px', background: 'var(--amber)', color: '#fff', borderRadius: 3, fontWeight: 500 }}>Flagged</span>}
                             {r.control_ref && <span style={{ fontSize: 11, color: 'var(--muted)' }}>{r.control_ref}</span>}
                           </div>
-                          <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.4 }}>{r.detail}</div>
+                          <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.4, marginBottom: r.regulatory_impact ? 6 : 0 }}>{r.detail}</div>
+                          {r.regulatory_impact && (
+                            <div style={{ fontSize: 11, color: 'var(--red)', background: '#FCEBEB', padding: '4px 8px', borderRadius: 4, marginBottom: 4 }}>
+                              ⚠ {r.regulatory_impact}
+                            </div>
+                          )}
+                          <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginTop: 4 }}>
+                            {r.iso_ref && <span style={{ fontSize: 10, padding: '1px 6px', background: 'var(--cream2)', borderRadius: 3, color: 'var(--muted)' }}>ISO {r.iso_ref}</span>}
+                            {r.nist_ref && <span style={{ fontSize: 10, padding: '1px 6px', background: '#E6F1FB', borderRadius: 3, color: '#185FA5' }}>NIST {r.nist_ref}</span>}
+                            {r.cis_ref && <span style={{ fontSize: 10, padding: '1px 6px', background: '#EAF3DE', borderRadius: 3, color: 'var(--green)' }}>CIS {r.cis_ref}</span>}
+                            {r.ce_ref && <span style={{ fontSize: 10, padding: '1px 6px', background: '#FAEEDA', borderRadius: 3, color: 'var(--amber)' }}>CE: {r.ce_ref}</span>}
+                          </div>
                         </div>
                       </div>
                     ))}

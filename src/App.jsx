@@ -15,6 +15,7 @@ import RiskRegister from './pages/RiskRegister'
 import Incidents from './pages/Incidents'
 import IncidentDetail from './pages/IncidentDetail'
 import AuditLog from './pages/AuditLog'
+import OrgContext from './pages/OrgContext'
 
 function ProtectedRoute({ children, session }) {
   if (!session) return <Navigate to="/login" replace />
@@ -57,6 +58,7 @@ export default function App() {
         <Route path="incidents" element={<Incidents />} />
         <Route path="incidents/:id" element={<IncidentDetail />} />
         <Route path="audit" element={<AuditLog />} />
+        <Route path="org-context" element={<OrgContext />} />
       </Route>
     </Routes>
   )

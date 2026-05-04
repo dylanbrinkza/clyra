@@ -1,7 +1,7 @@
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' })
 
-  const { assetName, vendorUrl, tier, profile, certifications = [] } = req.body
+  const { assetName, vendorUrl, tier, profile, certifications = [], orgContext } = req.body
 
   const domainsByTier = {
     1: ['Information Security Policy', 'Access Control', 'Data Protection and Privacy', 'Incident Management', 'Business Continuity and Disaster Recovery', 'Third-Party and Supply Chain Management', 'Physical Security', 'Vulnerability and Patch Management', 'Change Management', 'Compliance and Certification'],
@@ -14,46 +14,57 @@ export default async function handler(req, res) {
   const domains = domainsByTier[tier] || domainsByTier[3]
   const count = questionCounts[tier] || 15
 
+  const orgSection = orgContext ? `
+ORGANISATION CONTEXT:
+- Company: ${orgContext.company_name || 'Not specified'} | Industry: ${orgContext.industry || 'Not specified'}
+- Regulatory frameworks: ${orgContext.regulatory_frameworks?.join(', ') || 'Not specified'}
+- Data held: ${orgContext.data_types?.join(', ') || 'Not specified'}
+- Special category data: ${orgContext.special_category_data ? 'Yes' : 'No'}
+- Own certifications: ${orgContext.existing_certifications?.join(', ') || 'None'}
+- Risk appetite: ${orgContext.risk_appetite || 'Not specified'}
+- Compliance notes: ${orgContext.compliance_notes || 'None'}
+
+Use this context to make questions relevant to this organisation's specific obligations. For example:
+- If they are FCA regulated, probe vendor's financial data handling and SYSC-relevant controls
+- If they hold health data, probe DSPT/HIPAA relevant controls
+- If they hold children's data, probe age verification and COPPA/GDPR-K relevant controls
+- Frame questions around the organisation's actual regulatory exposure, not generic best practice
+` : ''
+
   const certContext = certifications.length > 0
-    ? `The vendor has provided: ${certifications.join(', ')}. For areas evidenced by these certifications, ask targeted follow-up questions about scope, currency, and exceptions rather than basics. Focus deeper questioning on areas NOT covered.`
-    : 'No certifications provided upfront — question all domains thoroughly.'
+    ? `Vendor has provided: ${certifications.join(', ')}. Probe scope, exceptions and currency rather than basics for covered areas.`
+    : 'No certifications provided — question all domains thoroughly.'
 
-  const prompt = `You are a senior information security assessor with expertise in ISO 27001:2022, NIST CSF 2.0, CIS Controls v8, and Cyber Essentials. You are generating a vendor risk questionnaire.
-
-Vendor: ${assetName}
-${vendorUrl ? `Vendor website: ${vendorUrl} — use this to understand the tool and tailor questions to its specific function and risk profile.` : ''}
-Risk Tier: Tier ${tier}
-Data sensitivity: ${profile.data_sensitivity}
-Network access: ${profile.network_access}
-Integration depth: ${profile.integration_depth}
-Criticality: ${profile.criticality}
+  const prompt = `You are a senior information security assessor with expertise in ISO 27001:2022, NIST CSF 2.0, CIS Controls v8, and Cyber Essentials.
+${orgSection}
+VENDOR BEING ASSESSED:
+- Vendor: ${assetName}${vendorUrl ? ` (${vendorUrl})` : ''}
+- Risk Tier: Tier ${tier}
+- Data sensitivity: ${profile.data_sensitivity}
+- Network access: ${profile.network_access}
+- Integration depth: ${profile.integration_depth}
+- Criticality: ${profile.criticality}
 
 Certification context: ${certContext}
 
-Generate exactly ${count} questions covering these domains: ${domains.join(', ')}.
+Generate exactly ${count} questions covering: ${domains.join(', ')}.
 
-Each question must be mapped to controls across ALL applicable frameworks. For each question provide:
-- The specific domain
-- A clear, vendor-specific question (not generic boilerplate)
-- ISO 27001:2022 Annex A control reference (e.g. A.8.2)
-- NIST CSF 2.0 reference (e.g. PR.AC-01, DE.CM-01)
-- CIS Controls v8 reference (e.g. CIS 5.1, CIS 6.2)
-- Cyber Essentials reference where applicable (e.g. CE: Access Control, CE: Patch Management) or empty string
-- Adaptive follow-up trigger if the answer requires deeper probing
-
-Weight questions toward the vendor's specific risk profile and integration depth. Questions must be specific to this vendor's function, not generic.
+Each question must:
+- Be specific to this vendor's function and this organisation's context — not generic boilerplate
+- Reference all applicable frameworks with control references
+- Be answerable by a vendor's security or compliance team
 
 Respond ONLY with a JSON array, no other text:
 [
   {
-    "domain": "<domain name>",
-    "question": "<specific question text>",
-    "control_ref": "<ISO 27001:2022 ref>",
-    "nist_ref": "<NIST CSF 2.0 ref>",
-    "cis_ref": "<CIS Controls v8 ref>",
+    "domain": "<domain>",
+    "question": "<specific question>",
+    "control_ref": "<ISO 27001:2022 ref e.g. A.8.2>",
+    "nist_ref": "<NIST CSF 2.0 ref e.g. PR.AC-01>",
+    "cis_ref": "<CIS Controls v8 ref e.g. CIS 5.1>",
     "ce_ref": "<Cyber Essentials ref or empty string>",
-    "order_num": <1, 2, 3...>,
-    "follow_up_trigger": "<condition that triggers follow-up, or empty string>"
+    "order_num": <number>,
+    "follow_up_trigger": "<condition or empty string>"
   }
 ]`
 

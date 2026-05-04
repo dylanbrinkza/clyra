@@ -53,6 +53,14 @@ export default function AssetDetail() {
     try {
       const { data: { user } } = await supabase.auth.getUser()
 
+      // Soft delete
+      await supabase.from('assets').update({
+        deleted_at: new Date().toISOString(),
+        deleted_by: user?.email || 'unknown',
+        delete_reason: deleteReason,
+      }).eq('id', id)
+
+      // Audit log
       await supabase.from('asset_audit_log').insert([{
         asset_id: id,
         asset_name: asset.name,
@@ -62,7 +70,6 @@ export default function AssetDetail() {
         changes: { name: asset.name, tier: asset.tier, type: asset.type },
       }])
 
-      await supabase.from('assets').delete().eq('id', id)
       navigate('/assets')
     } catch (err) {
       console.error(err)
@@ -75,6 +82,7 @@ export default function AssetDetail() {
 
   const ragLabel = asset.rag ? asset.rag.charAt(0).toUpperCase() + asset.rag.slice(1) : 'Unknown'
   const requiredCount = findings.filter(f => f.label === 'Required').length
+  const isDeleted = !!asset.deleted_at
 
   const tabs = [
     { key: 'overview', label: 'Overview' },
@@ -86,7 +94,14 @@ export default function AssetDetail() {
     <>
       <div className="breadcrumb"><Link to="/assets">Asset register</Link> › {asset.name}</div>
 
-      <div className="detail-header" style={{ position: 'relative' }}>
+      {isDeleted && (
+        <div style={{ background: '#FCEBEB', border: '1px solid #F0C0C0', borderRadius: 10, padding: '10px 16px', marginBottom: 16, fontSize: 13, color: 'var(--red)', display: 'flex', gap: 10, alignItems: 'center' }}>
+          <span>✕</span>
+          <span>This asset was deleted on {new Date(asset.deleted_at).toLocaleDateString()} by {asset.deleted_by}. Reason: {asset.delete_reason}</span>
+        </div>
+      )}
+
+      <div className="detail-header">
         <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 6 }}>
           <AssetLogo vendorUrl={asset.vendor_url} companyName={asset.company_name} assetName={asset.name} size={44} />
           <div>
@@ -101,27 +116,31 @@ export default function AssetDetail() {
           <div className="detail-score-num">{asset.score || '—'}</div>
           <div className="detail-score-label">Risk score · {ragLabel}</div>
         </div>
-        <button
-          onClick={() => setShowDeleteModal(true)}
-          style={{ position: 'absolute', bottom: '1.25rem', right: '1.5rem', background: 'rgba(255,255,255,0.1)', border: '1px solid rgba(255,255,255,0.2)', color: 'rgba(245,240,232,0.7)', fontSize: 12, padding: '5px 12px', borderRadius: 6, cursor: 'pointer', fontFamily: 'inherit' }}>
-          Delete asset
-        </button>
       </div>
 
-      {/* TABS */}
-      <div style={{ display: 'flex', gap: 0, marginBottom: '1.5rem', borderBottom: '0.5px solid var(--border)' }}>
-        {tabs.map(tab => (
-          <button key={tab.key} onClick={() => setActiveTab(tab.key)} style={{
-            padding: '10px 18px', fontSize: 13, background: 'none', border: 'none', cursor: 'pointer',
-            color: activeTab === tab.key ? 'var(--text)' : 'var(--muted)',
-            fontWeight: activeTab === tab.key ? 500 : 400,
-            borderBottom: activeTab === tab.key ? '2px solid var(--brown)' : '2px solid transparent',
-            marginBottom: -1, fontFamily: 'inherit',
-          }}>{tab.label}</button>
-        ))}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem', borderBottom: '0.5px solid var(--border)', paddingBottom: 0 }}>
+        <div style={{ display: 'flex', gap: 0 }}>
+          {tabs.map(tab => (
+            <button key={tab.key} onClick={() => setActiveTab(tab.key)} style={{
+              padding: '10px 18px', fontSize: 13, background: 'none', border: 'none', cursor: 'pointer',
+              color: activeTab === tab.key ? 'var(--text)' : 'var(--muted)',
+              fontWeight: activeTab === tab.key ? 500 : 400,
+              borderBottom: activeTab === tab.key ? '2px solid var(--brown)' : '2px solid transparent',
+              marginBottom: -1, fontFamily: 'inherit',
+            }}>{tab.label}</button>
+          ))}
+        </div>
+        {!isDeleted && (
+          <button onClick={() => setShowDeleteModal(true)} style={{
+            fontSize: 12, color: 'var(--red)', background: 'none',
+            border: '0.5px solid var(--red)', borderRadius: 6,
+            padding: '5px 12px', cursor: 'pointer', fontFamily: 'inherit', marginBottom: 8,
+          }}>
+            Delete asset
+          </button>
+        )}
       </div>
 
-      {/* OVERVIEW TAB */}
       {activeTab === 'overview' && (
         <div className="dash-grid">
           <div>
@@ -229,50 +248,40 @@ export default function AssetDetail() {
               </div>
             )}
 
-            <div className="trigger-card">
-              <div className="trigger-title">Incident response</div>
-              <div className="trigger-desc">Trigger an incident for this asset. Clyra will guide you through response, notification, and resolution.</div>
-              <button className="btn" style={{ width: '100%', textAlign: 'center' }} onClick={() => navigate('/incidents')}>
-                Trigger incident response
-              </button>
-            </div>
+            {!isDeleted && (
+              <div className="trigger-card">
+                <div className="trigger-title">Incident response</div>
+                <div className="trigger-desc">Trigger an incident for this asset. Clyra will guide you through response, notification, and resolution.</div>
+                <button className="btn" style={{ width: '100%', textAlign: 'center' }} onClick={() => navigate('/incidents')}>
+                  Trigger incident response
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
 
-      {/* QUESTIONNAIRES TAB */}
       {activeTab === 'questionnaires' && (
         <div className="card">
           {questionnaires.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--muted)', fontSize: 13 }}>
-              No questionnaires linked to this asset.
-            </div>
+            <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--muted)', fontSize: 13 }}>No questionnaires linked to this asset.</div>
           ) : questionnaires.map(q => (
             <div key={q.id} className="asset-row" onClick={() => navigate(`/questionnaires/${q.id}`)}>
               <div className={`dot ${q.status === 'completed' ? 'green' : 'amber'}`}></div>
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 13, fontWeight: 500 }}>{q.asset_name}</div>
-                <div style={{ fontSize: 11, color: 'var(--muted)' }}>
-                  Tier {q.tier} · {q.status} · {new Date(q.created_at).toLocaleDateString()}
-                </div>
+                <div style={{ fontSize: 11, color: 'var(--muted)' }}>Tier {q.tier} · {q.status} · {new Date(q.created_at).toLocaleDateString()}</div>
               </div>
-              {q.verdict && (
-                <span style={{ fontSize: 11, padding: '3px 8px', borderRadius: 4, fontWeight: 500, background: 'var(--cream2)', color: 'var(--muted)' }}>
-                  {q.verdict}
-                </span>
-              )}
+              {q.verdict && <span style={{ fontSize: 11, padding: '3px 8px', borderRadius: 4, fontWeight: 500, background: 'var(--cream2)', color: 'var(--muted)' }}>{q.verdict}</span>}
             </div>
           ))}
         </div>
       )}
 
-      {/* AUDIT TAB */}
       {activeTab === 'audit' && (
         <div className="card">
           {auditLog.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--muted)', fontSize: 13 }}>
-              No audit events yet. Changes to this asset will be recorded here.
-            </div>
+            <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--muted)', fontSize: 13 }}>No audit events yet.</div>
           ) : auditLog.map((entry, i) => (
             <div key={entry.id} style={{ display: 'flex', gap: 14, paddingBottom: 16, marginBottom: 16, borderBottom: i < auditLog.length - 1 ? '0.5px solid var(--border)' : 'none' }}>
               <div style={{ width: 28, height: 28, borderRadius: '50%', background: auditColor[entry.action] + '20', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, color: auditColor[entry.action], flexShrink: 0, marginTop: 2 }}>
@@ -285,9 +294,7 @@ export default function AssetDetail() {
                   <span style={{ fontSize: 11, color: 'var(--muted)', marginLeft: 'auto' }}>{new Date(entry.created_at).toLocaleString()}</span>
                 </div>
                 {entry.reason && (
-                  <div style={{ fontSize: 13, color: 'var(--muted)', padding: '8px 10px', background: 'var(--cream)', borderRadius: 6, lineHeight: 1.5 }}>
-                    {entry.reason}
-                  </div>
+                  <div style={{ fontSize: 13, color: 'var(--muted)', padding: '8px 10px', background: 'var(--cream)', borderRadius: 6, lineHeight: 1.5 }}>{entry.reason}</div>
                 )}
               </div>
             </div>
@@ -295,7 +302,6 @@ export default function AssetDetail() {
         </div>
       )}
 
-      {/* DELETE MODAL */}
       {showDeleteModal && (
         <div style={{ position: 'fixed', inset: 0, zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <div onClick={() => setShowDeleteModal(false)} style={{ position: 'absolute', inset: 0, background: 'rgba(26,18,8,0.4)' }} />
@@ -304,31 +310,23 @@ export default function AssetDetail() {
               <AssetLogo vendorUrl={asset.vendor_url} companyName={asset.company_name} assetName={asset.name} size={36} />
               <div>
                 <div style={{ fontSize: 15, fontWeight: 500 }}>Delete {asset.name}?</div>
-                <div style={{ fontSize: 12, color: 'var(--muted)' }}>This will remove the asset from the register permanently.</div>
+                <div style={{ fontSize: 12, color: 'var(--muted)' }}>Asset will be removed from the active register.</div>
               </div>
             </div>
             <div style={{ background: '#FCEBEB', borderRadius: 8, padding: '10px 12px', marginBottom: 16, fontSize: 12, color: 'var(--red)', lineHeight: 1.5 }}>
-              This action cannot be undone. The audit trail will be preserved.
+              The asset will be soft-deleted and visible in the "Deleted assets" section of the register. The audit trail is preserved permanently.
             </div>
             <div style={{ marginBottom: 16 }}>
-              <label style={{ fontSize: 12, fontWeight: 500, color: 'var(--muted)', display: 'block', marginBottom: 6 }}>
-                Reason for deletion *
-              </label>
-              <textarea
-                value={deleteReason}
-                onChange={e => setDeleteReason(e.target.value)}
+              <label style={{ fontSize: 12, fontWeight: 500, color: 'var(--muted)', display: 'block', marginBottom: 6 }}>Reason for deletion *</label>
+              <textarea value={deleteReason} onChange={e => setDeleteReason(e.target.value)}
                 placeholder="e.g. Vendor contract ended, tool decommissioned, duplicate entry..."
-                rows={3}
-                style={{ width: '100%', padding: '10px 12px', border: '0.5px solid rgba(44,31,14,0.25)', borderRadius: 8, fontSize: 13, fontFamily: 'inherit', resize: 'none', outline: 'none' }}
-              />
+                rows={3} style={{ width: '100%', padding: '10px 12px', border: '0.5px solid rgba(44,31,14,0.25)', borderRadius: 8, fontSize: 13, fontFamily: 'inherit', resize: 'none', outline: 'none' }} />
             </div>
             <div style={{ display: 'flex', gap: 10 }}>
               <button className="btn" onClick={() => setShowDeleteModal(false)} style={{ flex: 1 }}>Cancel</button>
-              <button
-                onClick={handleDelete}
-                disabled={deleting || !deleteReason.trim()}
+              <button onClick={handleDelete} disabled={deleting || !deleteReason.trim()}
                 style={{ flex: 2, padding: '8px', background: !deleteReason.trim() ? '#ccc' : 'var(--red)', color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, cursor: deleteReason.trim() ? 'pointer' : 'not-allowed', fontFamily: 'inherit' }}>
-                {deleting ? 'Deleting...' : 'Delete asset'}
+                {deleting ? 'Deleting...' : 'Confirm deletion'}
               </button>
             </div>
           </div>

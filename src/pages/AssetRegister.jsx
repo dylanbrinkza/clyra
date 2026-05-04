@@ -14,8 +14,10 @@ const qStatusColor = {
 export default function AssetRegister() {
   const navigate = useNavigate()
   const [assets, setAssets] = useState([])
+  const [deletedAssets, setDeletedAssets] = useState([])
   const [loading, setLoading] = useState(true)
   const [showAdd, setShowAdd] = useState(false)
+  const [showDeleted, setShowDeleted] = useState(false)
   const [tierFilter, setTierFilter] = useState('all')
   const [statusFilter, setStatusFilter] = useState('all')
   const [typeFilter, setTypeFilter] = useState('all')
@@ -25,7 +27,10 @@ export default function AssetRegister() {
 
   async function fetchAssets() {
     const { data, error } = await supabase.from('assets').select('*').order('tier')
-    if (!error) setAssets(data)
+    if (!error) {
+      setAssets(data.filter(a => !a.deleted_at))
+      setDeletedAssets(data.filter(a => !!a.deleted_at))
+    }
     setLoading(false)
   }
 
@@ -46,6 +51,38 @@ export default function AssetRegister() {
 
   if (loading) return <div style={{ padding: '2rem', color: 'var(--muted)' }}>Loading...</div>
 
+  const AssetRow = ({ asset, isDeleted = false }) => (
+    <tr className="clickable" onClick={() => navigate(`/assets/${asset.id}`)}
+      style={{ opacity: isDeleted ? 0.6 : 1 }}>
+      <td>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <AssetLogo vendorUrl={asset.vendor_url} companyName={asset.company_name} assetName={asset.name} size={30} />
+          <div>
+            <div style={{ fontWeight: 500, display: 'flex', alignItems: 'center', gap: 8 }}>
+              {asset.name}
+              {isDeleted && <span style={{ fontSize: 10, padding: '1px 6px', background: '#FCEBEB', color: 'var(--red)', borderRadius: 3, fontWeight: 500 }}>Deleted</span>}
+            </div>
+            {asset.company_name && <div style={{ fontSize: 11, color: 'var(--muted)' }}>{asset.company_name}</div>}
+          </div>
+        </div>
+      </td>
+      <td style={{ color: 'var(--muted)' }}>{asset.type}</td>
+      <td><span className={`tier-badge t${asset.tier}`}>Tier {asset.tier}</span></td>
+      <td style={{ fontSize: 12, color: isDeleted ? 'var(--muted)' : qStatusColor[asset.questionnaire_status] || 'var(--muted)', textTransform: 'capitalize' }}>
+        {isDeleted ? `Deleted ${new Date(asset.deleted_at).toLocaleDateString()}` : (asset.questionnaire_status || 'not sent')}
+      </td>
+      <td>
+        {isDeleted
+          ? <span style={{ fontSize: 12, color: 'var(--muted)' }}>{asset.delete_reason ? asset.delete_reason.slice(0, 40) + (asset.delete_reason.length > 40 ? '...' : '') : '—'}</span>
+          : <span className="score-pill"><span className={`score-dot ${asset.rag}`}></span>{asset.rag ? asset.rag.charAt(0).toUpperCase() + asset.rag.slice(1) : '—'}</span>
+        }
+      </td>
+      <td style={{ fontSize: 12, color: 'var(--muted)' }}>
+        {isDeleted ? `by ${asset.deleted_by || '—'}` : (asset.review_due_date ? new Date(asset.review_due_date).toLocaleDateString() : asset.review_due || '—')}
+      </td>
+    </tr>
+  )
+
   return (
     <>
       {showAdd && <AddAssetModal onClose={() => setShowAdd(false)} />}
@@ -57,12 +94,8 @@ export default function AssetRegister() {
 
       <div className="card">
         <div className="filter-row" style={{ marginBottom: 12 }}>
-          <input
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-            placeholder="Search assets..."
-            style={{ padding: '6px 10px', border: '0.5px solid rgba(44,31,14,0.2)', borderRadius: 6, fontSize: 13, background: '#fff', outline: 'none', fontFamily: 'inherit', minWidth: 160 }}
-          />
+          <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search assets..."
+            style={{ padding: '6px 10px', border: '0.5px solid rgba(44,31,14,0.2)', borderRadius: 6, fontSize: 13, background: '#fff', outline: 'none', fontFamily: 'inherit', minWidth: 160 }} />
           <select value={tierFilter} onChange={e => setTierFilter(e.target.value)}>
             <option value="all">All tiers</option>
             <option value="1">Tier 1 — Critical</option>
@@ -86,51 +119,46 @@ export default function AssetRegister() {
             <option value="Internal tool">Internal tool</option>
           </select>
         </div>
+
         <table className="data-table">
           <thead>
             <tr><th>Asset</th><th>Type</th><th>Tier</th><th>Questionnaire</th><th>RAG</th><th>Review due</th></tr>
           </thead>
           <tbody>
-            {filtered.map(asset => (
-              <tr key={asset.id} className="clickable" onClick={() => navigate(`/assets/${asset.id}`)}>
-                <td>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <AssetLogo
-                      vendorUrl={asset.vendor_url}
-                      companyName={asset.company_name}
-                      assetName={asset.name}
-                      size={30}
-                    />
-                    <div>
-                      <div style={{ fontWeight: 500 }}>{asset.name}</div>
-                      {asset.company_name && <div style={{ fontSize: 11, color: 'var(--muted)' }}>{asset.company_name}</div>}
-                    </div>
-                  </div>
-                </td>
-                <td style={{ color: 'var(--muted)' }}>{asset.type}</td>
-                <td><span className={`tier-badge t${asset.tier}`}>Tier {asset.tier}</span></td>
-                <td style={{ fontSize: 12, color: qStatusColor[asset.questionnaire_status] || 'var(--muted)', textTransform: 'capitalize' }}>
-                  {asset.questionnaire_status || 'not sent'}
-                </td>
-                <td>
-                  <span className="score-pill">
-                    <span className={`score-dot ${asset.rag}`}></span>
-                    {asset.rag ? asset.rag.charAt(0).toUpperCase() + asset.rag.slice(1) : '—'}
-                  </span>
-                </td>
-                <td style={{ fontSize: 12, color: 'var(--muted)' }}>
-                  {asset.review_due_date ? new Date(asset.review_due_date).toLocaleDateString() : asset.review_due || '—'}
-                </td>
-              </tr>
-            ))}
+            {filtered.map(asset => <AssetRow key={asset.id} asset={asset} />)}
           </tbody>
         </table>
+
         {filtered.length === 0 && (
-          <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--muted)', fontSize: 13 }}>
-            No assets match your filters.
-          </div>
+          <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--muted)', fontSize: 13 }}>No assets match your filters.</div>
         )}
       </div>
+
+      {/* DELETED ASSETS SECTION */}
+      {deletedAssets.length > 0 && (
+        <div style={{ marginTop: '1.5rem' }}>
+          <button onClick={() => setShowDeleted(!showDeleted)} style={{
+            display: 'flex', alignItems: 'center', gap: 8, background: 'none', border: 'none',
+            cursor: 'pointer', fontSize: 13, color: 'var(--muted)', fontFamily: 'inherit', marginBottom: 10, padding: 0,
+          }}>
+            <span style={{ fontSize: 11, transform: showDeleted ? 'rotate(90deg)' : 'rotate(0)', display: 'inline-block', transition: 'transform 0.15s' }}>▶</span>
+            Deleted assets ({deletedAssets.length})
+          </button>
+
+          {showDeleted && (
+            <div className="card" style={{ opacity: 0.85, border: '0.5px solid rgba(192,57,43,0.2)' }}>
+              <table className="data-table">
+                <thead>
+                  <tr><th>Asset</th><th>Type</th><th>Tier</th><th>Deleted</th><th>Reason</th><th>Deleted by</th></tr>
+                </thead>
+                <tbody>
+                  {deletedAssets.map(asset => <AssetRow key={asset.id} asset={asset} isDeleted />)}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
     </>
   )
 }

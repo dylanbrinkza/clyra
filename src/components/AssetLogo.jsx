@@ -14,7 +14,6 @@ const knownDomains = {
   'microsoft 365': 'microsoft.com',
   'microsoft': 'microsoft.com',
   'google workspace': 'google.com',
-  'gmail': 'google.com',
   'github': 'github.com',
   'gitlab': 'gitlab.com',
   'jira': 'atlassian.com',
@@ -50,7 +49,6 @@ const knownDomains = {
   'netlify': 'netlify.com',
   'azure': 'microsoft.com',
   'google cloud': 'google.com',
-  'gcp': 'google.com',
 }
 
 function getDomain(vendorUrl, companyName, assetName) {
@@ -60,9 +58,8 @@ function getDomain(vendorUrl, companyName, assetName) {
   if (knownDomains[nameLower]) return knownDomains[nameLower]
   if (knownDomains[companyLower]) return knownDomains[companyLower]
 
-  // Partial match — check if asset name starts with a known key
   for (const [key, domain] of Object.entries(knownDomains)) {
-    if (nameLower.startsWith(key) || key.startsWith(nameLower)) return domain
+    if (nameLower.includes(key) || key.includes(nameLower.split(' ')[0])) return domain
   }
 
   if (vendorUrl) {
@@ -96,43 +93,29 @@ function Fallback({ assetName, companyName, size }) {
 }
 
 export default function AssetLogo({ vendorUrl, companyName, assetName, size = 32 }) {
-  const [clearbitFailed, setClearbitFailed] = useState(false)
-  const [logodevFailed, setLogodevFailed] = useState(false)
+  const [failed, setFailed] = useState(false)
   const domain = getDomain(vendorUrl, companyName, assetName)
 
-  if (!domain) return <Fallback assetName={assetName} companyName={companyName} size={size} />
-
-  const imgStyle = {
-    width: size, height: size, borderRadius: 8,
-    objectFit: 'contain', background: '#fff',
-    border: '0.5px solid rgba(44,31,14,0.1)',
-    flexShrink: 0, padding: 2,
+  if (!domain || failed) {
+    return <Fallback assetName={assetName} companyName={companyName} size={size} />
   }
 
-  // Try Clearbit first
-  if (!clearbitFailed) {
-    return (
+  // Use Google's favicon service — reliable, no auth needed, works for all domains
+  const faviconUrl = `https://www.google.com/s2/favicons?domain=${domain}&sz=64`
+
+  return (
+    <div style={{
+      width: size, height: size, borderRadius: 8, background: '#fff',
+      border: '0.5px solid rgba(44,31,14,0.1)', flexShrink: 0,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      overflow: 'hidden',
+    }}>
       <img
-        src={`https://logo.clearbit.com/${domain}`}
+        src={faviconUrl}
         alt={assetName}
-        onError={() => setClearbitFailed(true)}
-        style={imgStyle}
+        onError={() => setFailed(true)}
+        style={{ width: size * 0.65, height: size * 0.65, objectFit: 'contain' }}
       />
-    )
-  }
-
-  // Fallback to Logo.dev
-  if (!logodevFailed) {
-    return (
-      <img
-        src={`https://img.logo.dev/${domain}?token=pk_X-1ZO13GSgeOoUrIuJ6BeQ`}
-        alt={assetName}
-        onError={() => setLogodevFailed(true)}
-        style={imgStyle}
-      />
-    )
-  }
-
-  // Final fallback — coloured initial
-  return <Fallback assetName={assetName} companyName={companyName} size={size} />
+    </div>
+  )
 }

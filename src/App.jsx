@@ -55,6 +55,21 @@ export default function App() {
     setOnboardingComplete(data?.onboarding_complete === true)
   }
 
+  // Re-check onboarding when navigating back — handles case where
+  // onboarding sets complete=true then navigates to /questionnaires/new
+  useEffect(() => {
+    async function recheck() {
+      if (!session || userRole === 'superadmin' || onboardingComplete) return
+      const { data } = await supabase
+        .from('organisation_context')
+        .select('onboarding_complete')
+        .eq('user_id', session.user.id)
+        .single()
+      if (data?.onboarding_complete === true) setOnboardingComplete(true)
+    }
+    recheck()
+  }, [session, userRole])
+
   const loading = session === undefined || (session && userRole === undefined)
 
   if (loading) return (

@@ -300,17 +300,21 @@ export default function Onboarding() {
               {assetMode === null && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: '2rem' }}>
                   <div onClick={async () => {
-                    // Save onboarding progress first so wizard doesn't reset
                     setSaving(true)
                     try {
                       const { user, orgId } = await getUserOrgId()
+                      // Save org context AND mark onboarding complete so routing doesn't redirect back to /welcome
+                      const payload = { ...org, user_id: user.id, org_id: orgId, onboarding_complete: true, updated_at: new Date().toISOString() }
                       const { data: existing } = await supabase.from('organisation_context').select('id').eq('user_id', user.id).single()
-                      if (!existing) {
-                        await supabase.from('organisation_context').insert([{ user_id: user.id, org_id: orgId, onboarding_complete: false }])
+                      if (existing) {
+                        await supabase.from('organisation_context').update(payload).eq('user_id', user.id)
+                      } else {
+                        await supabase.from('organisation_context').insert([payload])
                       }
-                    } catch {}
+                      clearOrgContextCache()
+                    } catch (err) { console.error(err) }
                     setSaving(false)
-                    navigate('/questionnaires/new?from=onboarding')
+                    navigate('/questionnaires/new')
                   }}
                     style={{ padding: '1.5rem', background: '#fff', border: '1.5px solid var(--orange)', borderRadius: 12, cursor: 'pointer' }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>

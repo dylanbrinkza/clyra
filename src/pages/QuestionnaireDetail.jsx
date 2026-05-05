@@ -1,7 +1,23 @@
+import { useState, useEffect } from 'react'
+import { useParams, Link, useNavigate } from 'react-router-dom'
+import { supabase } from '../lib/supabase'
+import { getOrgContext } from '../lib/orgContext'
+import { getOrgId } from '../lib/auth'
 
+const verdictColor = { 'Accept': 'var(--green)', 'Accept with conditions': 'var(--amber)', 'Escalate for further review': 'var(--amber)', 'Do not proceed': 'var(--red)' }
+const verdictBg = { 'Accept': '#EAF3DE', 'Accept with conditions': '#FAEEDA', 'Escalate for further review': '#FAEEDA', 'Do not proceed': '#FAECE7' }
+const tierColors = { 1: 'var(--red)', 2: 'var(--amber)', 3: '#185FA5', 4: 'var(--green)' }
+const tierBg = { 1: '#FAECE7', 2: '#FAEEDA', 3: '#E6F1FB', 4: '#EAF3DE' }
+const tierLabel = { 1: 'Critical', 2: 'High', 3: 'Medium', 4: 'Low' }
+const tierReview = { 1: '1 year', 2: '1 year', 3: '2 years', 4: '3 years' }
+const severityColor = { Required: 'var(--red)', Recommended: 'var(--amber)', Advisory: '#aaa' }
+const severityBg = { Required: '#FAECE7', Recommended: '#FAEEDA', Advisory: 'var(--cream2)' }
+
+// Collapsible responses component
 function ResponsesSection({ questions, responses, domains }) {
   const [expanded, setExpanded] = useState(false)
   const answeredCount = responses.filter(r => r.answer?.trim()).length
+  const flaggedCount = responses.filter(r => r.flagged).length
 
   return (
     <div className="card">
@@ -13,9 +29,9 @@ function ResponsesSection({ questions, responses, domains }) {
           </div>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          {responses.filter(r => r.flagged).length > 0 && (
+          {flaggedCount > 0 && (
             <span style={{ fontSize: 11, padding: '2px 8px', background: '#FAEEDA', color: 'var(--amber)', borderRadius: 4, fontWeight: 500 }}>
-              {responses.filter(r => r.flagged).length} flagged
+              {flaggedCount} flagged
             </span>
           )}
           <span style={{ fontSize: 12, color: 'var(--muted)', transform: expanded ? 'rotate(180deg)' : 'rotate(0)', display: 'inline-block', transition: 'transform 0.2s' }}>▼</span>
@@ -26,7 +42,9 @@ function ResponsesSection({ questions, responses, domains }) {
         <div style={{ marginTop: 16, borderTop: '0.5px solid var(--border)', paddingTop: 16 }}>
           {domains.map(domain => (
             <div key={domain} style={{ marginBottom: 20 }}>
-              <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10, paddingBottom: 6, borderBottom: '0.5px solid var(--border)' }}>{domain}</div>
+              <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10, paddingBottom: 6, borderBottom: '0.5px solid var(--border)' }}>
+                {domain}
+              </div>
               {questions.filter(qq => qq.domain === domain).map(qq => {
                 const response = responses.find(r => r.question_id === qq.id)
                 return (
@@ -60,21 +78,6 @@ function ResponsesSection({ questions, responses, domains }) {
   )
 }
 
-import { useState, useEffect } from 'react'
-import { useParams, Link, useNavigate } from 'react-router-dom'
-import { supabase } from '../lib/supabase'
-import { getOrgContext } from '../lib/orgContext'
-import { getOrgId } from '../lib/auth'
-
-const verdictColor = { 'Accept': 'var(--green)', 'Accept with conditions': 'var(--amber)', 'Escalate for further review': 'var(--amber)', 'Do not proceed': 'var(--red)' }
-const verdictBg = { 'Accept': '#EAF3DE', 'Accept with conditions': '#FAEEDA', 'Escalate for further review': '#FAEEDA', 'Do not proceed': '#FAECE7' }
-const tierColors = { 1: 'var(--red)', 2: 'var(--amber)', 3: '#185FA5', 4: 'var(--green)' }
-const tierBg = { 1: '#FAECE7', 2: '#FAEEDA', 3: '#E6F1FB', 4: '#EAF3DE' }
-const tierLabel = { 1: 'Critical', 2: 'High', 3: 'Medium', 4: 'Low' }
-const tierReview = { 1: '1 year', 2: '1 year', 3: '2 years', 4: '3 years' }
-const severityColor = { Required: 'var(--red)', Recommended: 'var(--amber)', Advisory: '#aaa' }
-const severityBg = { Required: '#FAECE7', Recommended: '#FAEEDA', Advisory: 'var(--cream2)' }
-
 export default function QuestionnaireDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
@@ -90,11 +93,28 @@ export default function QuestionnaireDetail() {
   const [rejectionReason, setRejectionReason] = useState('')
   const [copied, setCopied] = useState(false)
   const [error, setError] = useState('')
+  const [pollCount, setPollCount] = useState(0)
 
   useEffect(() => {
     fetchAll()
     getOrgContext().then(ctx => setOrgContext(ctx))
   }, [id])
+
+  // Poll for auto-evaluation result every 10s if status is completed but no verdict yet
+  useEffect(() => {
+    if (!q) return
+    if (q.status === 'completed' && !q.verdict && pollCount < 12) {
+      const timer = setTimeout(async () => {
+        const { data } = await supabase.from('questionnaires').select('verdict, score, summary, strengths, recommendations, framework_assessment, approval_status').eq('id', id).single()
+        if (data?.verdict) {
+          setQ(prev => ({ ...prev, ...data }))
+        } else {
+          setPollCount(c => c + 1)
+        }
+      }, 10000)
+      return () => clearTimeout(timer)
+    }
+  }, [q, pollCount])
 
   async function fetchAll() {
     const [qRes, qqRes, certRes] = await Promise.all([
@@ -105,7 +125,7 @@ export default function QuestionnaireDetail() {
     if (!qRes.error) setQ(qRes.data)
     if (!certRes.error) setCerts(certRes.data || [])
     if (!qqRes.error) {
-      setQuestions(qqRes.data)
+      setQuestions(qqRes.data || [])
       const { data: rData } = await supabase.from('questionnaire_responses').select('*').eq('questionnaire_id', id)
       setResponses(rData || [])
     }
@@ -137,8 +157,14 @@ export default function QuestionnaireDetail() {
           orgContext,
         }),
       })
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}))
+        throw new Error(errData.error || `Server error ${res.status}`)
+      }
+
       const evaluation = await res.json()
-      if (!res.ok) throw new Error(evaluation.error)
+      if (!evaluation.verdict) throw new Error('Evaluation returned no verdict. Please try again.')
 
       await supabase.from('questionnaires').update({
         verdict: evaluation.verdict,
@@ -161,7 +187,7 @@ export default function QuestionnaireDetail() {
       }
       await fetchAll()
     } catch (err) {
-      setError(err.message)
+      setError(err.message || 'Evaluation failed. Please try again.')
     }
     setEvaluating(false)
   }
@@ -243,6 +269,7 @@ export default function QuestionnaireDetail() {
   const isPendingApproval = q.status === 'completed' && q.verdict && q.approval_status === 'pending'
   const isApproved = q.approval_status === 'approved'
   const isRejected = q.approval_status === 'rejected'
+  const isAutoEvaluating = q.status === 'completed' && !q.verdict && pollCount < 12
   const strengths = q.strengths || []
   const recommendations = q.recommendations || []
   const required = recommendations.filter(r => r.severity === 'Required')
@@ -263,12 +290,24 @@ export default function QuestionnaireDetail() {
         {q.score != null && <div className="detail-score"><div className="detail-score-num">{q.score}</div><div className="detail-score-label">Risk score</div></div>}
       </div>
 
+      {/* Auto-evaluating banner */}
+      {isAutoEvaluating && (
+        <div style={{ background: '#E6F1FB', border: '1px solid #B3D4F0', borderRadius: 12, padding: '1rem 1.5rem', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: 12 }}>
+          <span style={{ width: 16, height: 16, border: '2px solid #185FA5', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite', display: 'inline-block', flexShrink: 0 }} />
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 500, color: '#185FA5' }}>AI evaluation in progress</div>
+            <div style={{ fontSize: 12, color: '#185FA5', opacity: 0.8 }}>This runs automatically after vendor submission. Usually takes 30–60 seconds.</div>
+          </div>
+          <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+        </div>
+      )}
+
       {isPendingApproval && (
         <div style={{ background: '#FFF9ED', border: '1px solid #F0D080', borderRadius: 12, padding: '1.25rem 1.5rem', marginBottom: '1.5rem' }}>
           <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16 }}>
             <div>
               <div style={{ fontSize: 14, fontWeight: 500, color: '#854F0B', marginBottom: 4 }}>Pending your approval</div>
-              <div style={{ fontSize: 13, color: '#6B5030', lineHeight: 1.5 }}>Review the verdict, findings, and responses — then approve to add to your asset register, or reject to decline.</div>
+              <div style={{ fontSize: 13, color: '#6B5030', lineHeight: 1.5 }}>Review the verdict and findings — then approve to add to your asset register, or reject to decline.</div>
             </div>
             <div style={{ display: 'flex', gap: 10, flexShrink: 0 }}>
               <button className="btn" onClick={() => setShowRejectModal(true)} style={{ borderColor: 'var(--red)', color: 'var(--red)' }}>Reject</button>
@@ -318,7 +357,7 @@ export default function QuestionnaireDetail() {
                   <div style={{ width: 1, height: 40, background: 'rgba(44,31,14,0.1)' }} />
                   <div>
                     <div style={{ fontSize: 11, color: 'var(--muted)', marginBottom: 2 }}>Context</div>
-                    <div style={{ fontSize: 12, color: 'var(--green)' }}>✦ {orgContext.company_name || 'Org context applied'}</div>
+                    <div style={{ fontSize: 12, color: 'var(--green)' }}>✦ {orgContext.company_name || 'Applied'}</div>
                   </div>
                 </>}
               </div>
@@ -378,9 +417,7 @@ export default function QuestionnaireDetail() {
                           </div>
                           <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.4, marginBottom: r.regulatory_impact ? 6 : 4 }}>{r.detail}</div>
                           {r.regulatory_impact && (
-                            <div style={{ fontSize: 11, color: 'var(--red)', background: '#FCEBEB', padding: '4px 8px', borderRadius: 4, marginBottom: 6 }}>
-                              ⚠ {r.regulatory_impact}
-                            </div>
+                            <div style={{ fontSize: 11, color: 'var(--red)', background: '#FCEBEB', padding: '4px 8px', borderRadius: 4, marginBottom: 6 }}>⚠ {r.regulatory_impact}</div>
                           )}
                           <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
                             {r.iso_ref && <span style={{ fontSize: 10, padding: '1px 6px', background: 'var(--cream2)', borderRadius: 3, color: 'var(--muted)' }}>ISO {r.iso_ref}</span>}
@@ -396,11 +433,11 @@ export default function QuestionnaireDetail() {
             </div>
           )}
 
-          {q.status === 'completed' && !q.verdict && (
+          {q.status === 'completed' && !q.verdict && !isAutoEvaluating && (
             <div className="card">
               <div style={{ fontSize: 14, fontWeight: 500, marginBottom: 6 }}>Responses received</div>
               <div style={{ fontSize: 13, color: 'var(--muted)', lineHeight: 1.5, marginBottom: 12 }}>
-                AI evaluation runs automatically after submission. If it hasn't completed yet, click below to trigger it manually.
+                AI evaluation runs automatically after submission — it may still be processing. Click below to trigger manually if it hasn't completed.
                 {orgContext && <span style={{ color: 'var(--green)' }}> Org context will be applied.</span>}
               </div>
               {error && (
@@ -408,14 +445,14 @@ export default function QuestionnaireDetail() {
                   {error}
                   <div style={{ marginTop: 6 }}>
                     <button onClick={runEvaluation} style={{ fontSize: 12, color: 'var(--red)', textDecoration: 'underline', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: 0 }}>
-                      Retry evaluation →
+                      Retry →
                     </button>
                   </div>
                 </div>
               )}
               <button className="btn btn-primary" onClick={runEvaluation} disabled={evaluating}>
                 {evaluating
-                  ? <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><span style={{ width: 12, height: 12, border: '2px solid rgba(245,240,232,0.3)', borderTopColor: '#F5F0E8', borderRadius: '50%', animation: 'spin 0.8s linear infinite', display: 'inline-block' }} />Evaluating — this can take up to 60 seconds...</span>
+                  ? <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><span style={{ width: 12, height: 12, border: '2px solid rgba(245,240,232,0.3)', borderTopColor: '#F5F0E8', borderRadius: '50%', animation: 'spin 0.8s linear infinite', display: 'inline-block' }} />Evaluating — up to 60 seconds...</span>
                   : 'Run AI evaluation'}
               </button>
               <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
@@ -439,8 +476,8 @@ export default function QuestionnaireDetail() {
             <div className="panel-card" style={{ border: '0.5px solid var(--green)' }}>
               <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--green)', marginBottom: 8 }}>✦ Org context applied</div>
               <div style={{ fontSize: 12, color: 'var(--muted)', lineHeight: 1.5 }}>
-                All assessments personalised for <strong>{orgContext.company_name || 'your organisation'}</strong>
-                {orgContext.regulatory_frameworks?.length > 0 && ` · ${orgContext.regulatory_frameworks.slice(0, 2).join(', ')}${orgContext.regulatory_frameworks.length > 2 ? ` +${orgContext.regulatory_frameworks.length - 2} more` : ''}`}
+                Personalised for <strong>{orgContext.company_name || 'your organisation'}</strong>
+                {orgContext.regulatory_frameworks?.length > 0 && ` · ${orgContext.regulatory_frameworks.slice(0, 2).join(', ')}${orgContext.regulatory_frameworks.length > 2 ? ` +${orgContext.regulatory_frameworks.length - 2}` : ''}`}
               </div>
             </div>
           )}
@@ -455,7 +492,7 @@ export default function QuestionnaireDetail() {
                     <div style={{ fontSize: 13, fontWeight: 500 }}>{c.cert_type}</div>
                     <div style={{ fontSize: 11, color: 'var(--muted)' }}>{c.file_name}</div>
                   </div>
-                  <a href={c.file_url} target="_blank" rel="noreferrer" style={{ fontSize: 11, color: 'var(--orange)' }}>View</a>
+                  {c.file_url && <a href={c.file_url} target="_blank" rel="noreferrer" style={{ fontSize: 11, color: 'var(--orange)' }}>View</a>}
                 </div>
               ))}
             </div>
@@ -471,11 +508,10 @@ export default function QuestionnaireDetail() {
             <div style={{ fontSize: 13, fontWeight: 500, marginBottom: 10 }}>Details</div>
             {[
               ['Asset', q.asset_name], ['Type', q.asset_type || '—'], ['Company', q.company_name || '—'],
-              ['Vendor', q.vendor_name || '—'], ['Email', q.vendor_email || '—'],
-              ['Integrations', q.integration_depth || '—'],
+              ['Vendor contact', q.vendor_name || '—'], ['Email', q.vendor_email || '—'],
+              ['Integration', q.integration_depth || '—'],
               ['Questions', questions.length],
               ['Created', new Date(q.created_at).toLocaleDateString()],
-              ['Expires', new Date(q.expires_at).toLocaleDateString()],
             ].map(([label, value]) => (
               <div key={label} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8, fontSize: 13 }}>
                 <span style={{ color: 'var(--muted)' }}>{label}</span>

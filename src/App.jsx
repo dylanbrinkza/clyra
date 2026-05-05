@@ -47,12 +47,40 @@ export default function App() {
       return
     }
     setUserRole('tenant')
-    const { data } = await supabase
+
+    // Get the user's org
+    const { data: membership } = await supabase
+      .from('org_memberships')
+      .select('org_id')
+      .eq('user_id', user.id)
+      .single()
+
+    if (!membership?.org_id) {
+      setOnboardingComplete(false)
+      return
+    }
+
+    // Check if the ORG has completed onboarding — not just this user
+    // This prevents new users invited to existing orgs from seeing the wizard
+    const { data: orgCtx } = await supabase
+      .from('organisation_context')
+      .select('onboarding_complete')
+      .eq('org_id', membership.org_id)
+      .single()
+
+    if (orgCtx?.onboarding_complete === true) {
+      setOnboardingComplete(true)
+      return
+    }
+
+    // Fall back to checking by user_id (first user in org doing onboarding)
+    const { data: userCtx } = await supabase
       .from('organisation_context')
       .select('onboarding_complete')
       .eq('user_id', user.id)
       .single()
-    setOnboardingComplete(data?.onboarding_complete === true)
+
+    setOnboardingComplete(userCtx?.onboarding_complete === true)
   }
 
   // Re-check onboarding when navigating back — handles case where
@@ -60,12 +88,19 @@ export default function App() {
   useEffect(() => {
     async function recheck() {
       if (!session || userRole === 'superadmin' || onboardingComplete) return
-      const { data } = await supabase
-        .from('organisation_context')
-        .select('onboarding_complete')
+      const { data: membership } = await supabase
+        .from('org_memberships')
+        .select('org_id')
         .eq('user_id', session.user.id)
         .single()
-      if (data?.onboarding_complete === true) setOnboardingComplete(true)
+      if (membership?.org_id) {
+        const { data } = await supabase
+          .from('organisation_context')
+          .select('onboarding_complete')
+          .eq('org_id', membership.org_id)
+          .single()
+        if (data?.onboarding_complete === true) setOnboardingComplete(true)
+      }
     }
     recheck()
   }, [session, userRole])

@@ -12,6 +12,8 @@ export default function VendorPortal() {
   const [submitted, setSubmitted] = useState(false)
   const [error, setError] = useState('')
   const [saveStatus, setSaveStatus] = useState('')
+  const [fileUploads, setFileUploads] = useState({}) // questionId -> [{name, url}]
+  const [uploading, setUploading] = useState({})
 
   useEffect(() => { fetchQuestionnaire() }, [token])
 
@@ -78,6 +80,32 @@ export default function VendorPortal() {
     } catch {
       setSaveStatus('Save failed')
     }
+  }
+
+  const handleFileUpload = async (questionId, file) => {
+    if (!file) return
+    setUploading(prev => ({ ...prev, [questionId]: true }))
+    try {
+      const path = `vendor-evidence/${questionnaire.id}/${questionId}/${Date.now()}-${file.name}`
+      const { error } = await supabase.storage.from('certifications').upload(path, file)
+      if (error) throw error
+      const { data: { publicUrl } } = supabase.storage.from('certifications').getPublicUrl(path)
+      setFileUploads(prev => ({
+        ...prev,
+        [questionId]: [...(prev[questionId] || []), { name: file.name, url: publicUrl }]
+      }))
+      // Save file reference to response
+      await supabase.from('questionnaire_responses').upsert([{
+        questionnaire_id: questionnaire.id,
+        question_id: questionId,
+        answer: answers[questionId] || '',
+        evidence_url: publicUrl,
+        evidence_name: file.name,
+      }], { onConflict: 'questionnaire_id,question_id' })
+    } catch (err) {
+      console.error('Upload failed:', err)
+    }
+    setUploading(prev => ({ ...prev, [questionId]: false }))
   }
 
   const handleSubmit = async () => {
@@ -241,6 +269,19 @@ export default function VendorPortal() {
                 {q.follow_up_trigger && answers[q.id]?.trim() && (
                   <div style={{ fontSize: 11, color: '#B5490A', marginTop: 6, paddingLeft: 2 }}>↳ {q.follow_up_trigger}</div>
                 )}
+                {/* Evidence upload */}
+                <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <label style={{ fontSize: 11, color: '#6B5E4F', cursor: 'pointer', padding: '4px 10px', border: '0.5px solid rgba(44,31,14,0.2)', borderRadius: 6, background: '#fff', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                    {uploading[q.id] ? 'Uploading...' : '+ Attach evidence'}
+                    <input type="file" style={{ display: 'none' }} disabled={uploading[q.id]}
+                      onChange={e => { if (e.target.files[0]) handleFileUpload(q.id, e.target.files[0]); e.target.value = '' }} />
+                  </label>
+                  {fileUploads[q.id]?.map((f, fi) => (
+                    <span key={fi} style={{ fontSize: 11, color: '#2E7D32', padding: '4px 8px', background: '#EAF3DE', borderRadius: 6 }}>
+                      ✓ {f.name}
+                    </span>
+                  ))}
+                </div>
               </div>
             ))}
           </div>

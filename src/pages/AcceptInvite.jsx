@@ -61,8 +61,19 @@ export default function AcceptInvite() {
       // Sign in
       await supabase.auth.signInWithPassword({ email: invite.email, password })
 
-      // Go to onboarding
-      navigate('/welcome')
+      // Check if the org has already completed onboarding
+      // If so, skip wizard and go straight to dashboard
+      const { data: orgCtx } = await supabase
+        .from('organisation_context')
+        .select('onboarding_complete')
+        .eq('org_id', invite.org_id)
+        .single()
+
+      if (orgCtx?.onboarding_complete === true) {
+        navigate('/dashboard')
+      } else {
+        navigate('/welcome')
+      }
     } catch (err) {
       setError(err.message)
     }

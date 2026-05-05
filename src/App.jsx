@@ -80,7 +80,26 @@ export default function App() {
       .eq('user_id', user.id)
       .single()
 
-    setOnboardingComplete(userCtx?.onboarding_complete === true)
+    if (userCtx?.onboarding_complete === true) {
+      setOnboardingComplete(true)
+      return
+    }
+
+    // If user is in an org but no context record exists at all,
+    // check if the org has ANY assets — if so it's already set up, skip wizard
+    const { count } = await supabase
+      .from('assets')
+      .select('*', { count: 'exact', head: true })
+      .eq('org_id', membership.org_id)
+      .is('deleted_at', null)
+
+    if (count > 0) {
+      // Org has data — mark complete so this user doesn't see wizard
+      setOnboardingComplete(true)
+      return
+    }
+
+    setOnboardingComplete(false)
   }
 
   // Re-check onboarding when navigating back — handles case where

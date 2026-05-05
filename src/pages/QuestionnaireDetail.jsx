@@ -1,3 +1,65 @@
+
+function ResponsesSection({ questions, responses, domains }) {
+  const [expanded, setExpanded] = useState(false)
+  const answeredCount = responses.filter(r => r.answer?.trim()).length
+
+  return (
+    <div className="card">
+      <div onClick={() => setExpanded(!expanded)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer', userSelect: 'none' }}>
+        <div>
+          <span className="card-title">{responses.length > 0 ? 'Questionnaire responses' : 'Questions'}</span>
+          <div style={{ fontSize: 12, color: 'var(--muted)', marginTop: 2 }}>
+            {questions.length} questions{responses.length > 0 ? ` · ${answeredCount} answered` : ''}
+          </div>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          {responses.filter(r => r.flagged).length > 0 && (
+            <span style={{ fontSize: 11, padding: '2px 8px', background: '#FAEEDA', color: 'var(--amber)', borderRadius: 4, fontWeight: 500 }}>
+              {responses.filter(r => r.flagged).length} flagged
+            </span>
+          )}
+          <span style={{ fontSize: 12, color: 'var(--muted)', transform: expanded ? 'rotate(180deg)' : 'rotate(0)', display: 'inline-block', transition: 'transform 0.2s' }}>▼</span>
+        </div>
+      </div>
+
+      {expanded && (
+        <div style={{ marginTop: 16, borderTop: '0.5px solid var(--border)', paddingTop: 16 }}>
+          {domains.map(domain => (
+            <div key={domain} style={{ marginBottom: 20 }}>
+              <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10, paddingBottom: 6, borderBottom: '0.5px solid var(--border)' }}>{domain}</div>
+              {questions.filter(qq => qq.domain === domain).map(qq => {
+                const response = responses.find(r => r.question_id === qq.id)
+                return (
+                  <div key={qq.id} style={{ marginBottom: 14 }}>
+                    <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: 4, display: 'flex', gap: 8 }}>
+                      <span style={{ flexShrink: 0 }}>{qq.order_num}.</span>
+                      <span style={{ flex: 1 }}>{qq.question}</span>
+                    </div>
+                    <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginLeft: 20, marginBottom: response?.answer ? 4 : 0 }}>
+                      {qq.control_ref && <span style={{ fontSize: 10, padding: '1px 6px', background: 'var(--cream2)', borderRadius: 3, color: 'var(--muted)' }}>ISO {qq.control_ref}</span>}
+                      {qq.nist_ref && <span style={{ fontSize: 10, padding: '1px 6px', background: '#E6F1FB', borderRadius: 3, color: '#185FA5' }}>NIST {qq.nist_ref}</span>}
+                      {qq.cis_ref && <span style={{ fontSize: 10, padding: '1px 6px', background: '#EAF3DE', borderRadius: 3, color: 'var(--green)' }}>CIS {qq.cis_ref}</span>}
+                      {qq.ce_ref && <span style={{ fontSize: 10, padding: '1px 6px', background: '#FAEEDA', borderRadius: 3, color: 'var(--amber)' }}>{qq.ce_ref}</span>}
+                    </div>
+                    {response?.answer ? (
+                      <div style={{ fontSize: 13, padding: '8px 10px', background: response.flagged ? '#FFF9ED' : 'var(--cream)', borderRadius: 6, lineHeight: 1.5, marginLeft: 20 }}>
+                        {response.answer}
+                        {response.flagged && <div style={{ fontSize: 11, color: 'var(--amber)', marginTop: 4 }}>⚠ Flagged for review</div>}
+                      </div>
+                    ) : (
+                      <div style={{ fontSize: 12, color: 'var(--muted)', fontStyle: 'italic', marginLeft: 20 }}>No response provided</div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 import { useState, useEffect } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
@@ -338,53 +400,29 @@ export default function QuestionnaireDetail() {
             <div className="card">
               <div style={{ fontSize: 14, fontWeight: 500, marginBottom: 6 }}>Responses received</div>
               <div style={{ fontSize: 13, color: 'var(--muted)', lineHeight: 1.5, marginBottom: 12 }}>
-                Run the AI evaluation to generate findings, a risk score, and a verdict.
+                AI evaluation runs automatically after submission. If it hasn't completed yet, click below to trigger it manually.
                 {orgContext && <span style={{ color: 'var(--green)' }}> Org context will be applied.</span>}
               </div>
-              {error && <div style={{ fontSize: 12, color: 'var(--red)', padding: '8px 12px', background: '#FCEBEB', borderRadius: 6, marginBottom: 12 }}>{error}</div>}
+              {error && (
+                <div style={{ fontSize: 12, color: 'var(--red)', padding: '8px 12px', background: '#FCEBEB', borderRadius: 6, marginBottom: 12 }}>
+                  {error}
+                  <div style={{ marginTop: 6 }}>
+                    <button onClick={runEvaluation} style={{ fontSize: 12, color: 'var(--red)', textDecoration: 'underline', background: 'none', border: 'none', cursor: 'pointer', fontFamily: 'inherit', padding: 0 }}>
+                      Retry evaluation →
+                    </button>
+                  </div>
+                </div>
+              )}
               <button className="btn btn-primary" onClick={runEvaluation} disabled={evaluating}>
                 {evaluating
-                  ? <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><span style={{ width: 12, height: 12, border: '2px solid rgba(245,240,232,0.3)', borderTopColor: '#F5F0E8', borderRadius: '50%', animation: 'spin 0.8s linear infinite', display: 'inline-block' }} />Evaluating responses...</span>
+                  ? <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}><span style={{ width: 12, height: 12, border: '2px solid rgba(245,240,232,0.3)', borderTopColor: '#F5F0E8', borderRadius: '50%', animation: 'spin 0.8s linear infinite', display: 'inline-block' }} />Evaluating — this can take up to 60 seconds...</span>
                   : 'Run AI evaluation'}
               </button>
               <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
             </div>
           )}
 
-          <div className="card">
-            <div className="card-header">
-              <span className="card-title">{responses.length > 0 ? 'Responses' : 'Questions'}</span>
-              <span style={{ fontSize: 12, color: 'var(--muted)' }}>{questions.length} questions</span>
-            </div>
-            {domains.map(domain => (
-              <div key={domain} style={{ marginBottom: 20 }}>
-                <div style={{ fontSize: 11, fontWeight: 600, color: 'var(--muted)', textTransform: 'uppercase', letterSpacing: '0.06em', marginBottom: 10, paddingBottom: 6, borderBottom: '0.5px solid var(--border)' }}>{domain}</div>
-                {questions.filter(qq => qq.domain === domain).map(qq => {
-                  const response = responses.find(r => r.question_id === qq.id)
-                  return (
-                    <div key={qq.id} style={{ marginBottom: 14 }}>
-                      <div style={{ fontSize: 12, color: 'var(--muted)', marginBottom: response?.answer ? 4 : 0, display: 'flex', gap: 8 }}>
-                        <span style={{ flexShrink: 0 }}>{qq.order_num}.</span>
-                        <span style={{ flex: 1 }}>{qq.question}</span>
-                      </div>
-                      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginLeft: 20, marginBottom: response?.answer ? 4 : 0 }}>
-                        {qq.control_ref && <span style={{ fontSize: 10, padding: '1px 6px', background: 'var(--cream2)', borderRadius: 3, color: 'var(--muted)' }}>ISO {qq.control_ref}</span>}
-                        {qq.nist_ref && <span style={{ fontSize: 10, padding: '1px 6px', background: '#E6F1FB', borderRadius: 3, color: '#185FA5' }}>NIST {qq.nist_ref}</span>}
-                        {qq.cis_ref && <span style={{ fontSize: 10, padding: '1px 6px', background: '#EAF3DE', borderRadius: 3, color: 'var(--green)' }}>CIS {qq.cis_ref}</span>}
-                        {qq.ce_ref && <span style={{ fontSize: 10, padding: '1px 6px', background: '#FAEEDA', borderRadius: 3, color: 'var(--amber)' }}>{qq.ce_ref}</span>}
-                      </div>
-                      {response?.answer && (
-                        <div style={{ fontSize: 13, padding: '8px 10px', background: response.flagged ? '#FFF9ED' : 'var(--cream)', borderRadius: 6, lineHeight: 1.5, marginLeft: 20 }}>
-                          {response.answer}
-                          {response.flagged && <div style={{ fontSize: 11, color: 'var(--amber)', marginTop: 4 }}>⚠ Flagged for review</div>}
-                        </div>
-                      )}
-                    </div>
-                  )
-                })}
-              </div>
-            ))}
-          </div>
+          <ResponsesSection questions={questions} responses={responses} domains={domains} />
         </div>
 
         <div>

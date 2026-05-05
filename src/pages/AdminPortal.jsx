@@ -249,7 +249,8 @@ export default function AdminPortal() {
                                 <div style={{ fontSize: 10, color: 'rgba(245,240,232,0.4)' }}>{m.role === 'admin' ? 'Org admin' : 'Member'} · joined {new Date(m.created_at).toLocaleDateString()}</div>
                               </div>
                             </div>
-                            {!isAdmin && (
+                            {/* Show controls for all members except the super admin */}
+                            {m.user_id !== 'de9ef1de-9441-4ea2-b5ef-a32ad0a5c04a' && (
                               <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                                 <select
                                   value={m.role || 'member'}

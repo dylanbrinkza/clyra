@@ -13,6 +13,7 @@ export default function AdminPortal() {
   const [creating, setCreating] = useState(false)
   const [inviting, setInviting] = useState(false)
   const [inviteLink, setInviteLink] = useState('')
+  const [inviteRole, setInviteRole] = useState('member')
   const [error, setError] = useState('')
   const [deleteConfirm, setDeleteConfirm] = useState(null)
   const [deleteUserConfirm, setDeleteUserConfirm] = useState(null) // { userId, email, orgId }
@@ -139,7 +140,7 @@ export default function AdminPortal() {
     try {
       const { data, error } = await supabase
         .from('org_invites')
-        .insert([{ org_id: showInvite.id, email: inviteEmail.trim(), role: 'admin' }])
+        .insert([{ org_id: showInvite.id, email: inviteEmail.trim(), role: inviteRole }])
         .select()
         .single()
       if (error) throw error
@@ -331,10 +332,17 @@ export default function AdminPortal() {
           <div style={{ position: 'relative', background: '#1A1208', border: '0.5px solid rgba(245,240,232,0.15)', borderRadius: 12, padding: '1.5rem', width: 460, zIndex: 1 }}>
             <div style={{ fontSize: 15, fontWeight: 500, marginBottom: 4 }}>Invite user to {showInvite.name}</div>
             <div style={{ fontSize: 12, color: 'rgba(245,240,232,0.4)', marginBottom: 16 }}>They will receive a link to set up their account and complete onboarding.</div>
-            <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
               <input value={inviteEmail} onChange={e => setInviteEmail(e.target.value)}
                 placeholder="user@company.com" type="email"
                 style={{ flex: 1, padding: '9px 12px', background: 'rgba(245,240,232,0.08)', border: '0.5px solid rgba(245,240,232,0.15)', borderRadius: 8, fontSize: 13, color: '#F5F0E8', outline: 'none', fontFamily: 'inherit' }} />
+            </div>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 16, alignItems: 'center' }}>
+              <select value={inviteRole} onChange={e => setInviteRole(e.target.value)}
+                style={{ flex: 1, padding: '9px 12px', background: 'rgba(245,240,232,0.08)', border: '0.5px solid rgba(245,240,232,0.15)', borderRadius: 8, fontSize: 13, color: '#F5F0E8', fontFamily: 'inherit' }}>
+                <option value="member">Member — view only</option>
+                <option value="admin">Org admin — full access</option>
+              </select>
               <button onClick={createInvite} disabled={inviting || !inviteEmail.trim()} style={{ padding: '9px 18px', background: '#B5490A', color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit', whiteSpace: 'nowrap' }}>
                 {inviting ? '...' : 'Generate link'}
               </button>
@@ -350,7 +358,7 @@ export default function AdminPortal() {
               </div>
             )}
             {error && <div style={{ fontSize: 12, color: '#ff6b6b', marginBottom: 12 }}>{error}</div>}
-            <button onClick={() => { setShowInvite(null); setInviteLink(''); setInviteEmail('') }} style={{ width: '100%', padding: '8px', background: 'none', border: '0.5px solid rgba(245,240,232,0.15)', borderRadius: 8, color: 'rgba(245,240,232,0.6)', cursor: 'pointer', fontFamily: 'inherit', fontSize: 13 }}>Close</button>
+            <button onClick={() => { setShowInvite(null); setInviteLink(''); setInviteEmail(''); setInviteRole('member') }} style={{ width: '100%', padding: '8px', background: 'none', border: '0.5px solid rgba(245,240,232,0.15)', borderRadius: 8, color: 'rgba(245,240,232,0.6)', cursor: 'pointer', fontFamily: 'inherit', fontSize: 13 }}>Close</button>
           </div>
         </div>
       )}

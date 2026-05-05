@@ -6,7 +6,7 @@ import { getOrgId } from '../lib/auth'
 const industries = ['Financial Services', 'Healthcare', 'Legal', 'Technology', 'Retail & eCommerce', 'Manufacturing', 'Education', 'Government & Public Sector', 'Professional Services', 'Media & Entertainment', 'Energy & Utilities', 'Other']
 const employeeCounts = ['1–10', '11–50', '51–200', '201–500', '501–1,000', '1,001–5,000', '5,000+']
 const dataSubjectCounts = ['Under 1,000', '1,000–10,000', '10,000–100,000', '100,000–1,000,000', 'Over 1,000,000']
-const riskAppetites = ['Very low — we avoid risk wherever possible', 'Low — we accept minimal risk with strong controls', 'Medium — we balance risk and opportunity', 'High — we accept more risk to enable growth']
+const riskAppetites = ['Very low — we minimise risk wherever possible', 'Low — we accept limited risk with strong controls in place', 'Medium — we take a balanced approach to risk', 'High — we are comfortable taking on significant risk']
 const techEnvironments = ['Cloud-first (majority SaaS/PaaS)', 'Hybrid (mix of cloud and on-premise)', 'On-premise majority', 'Multi-cloud', 'Legacy/mainframe heavy']
 
 const regulatoryOptions = ['GDPR (UK)', 'GDPR (EU)', 'FCA regulations', 'PCI DSS', 'NHS DSP Toolkit', 'HIPAA', 'SOX', 'NIS2 Directive', 'DORA', 'ISO 27001 (certified)', 'Cyber Essentials (certified)', 'NIST CSF', 'CCPA', 'Other']

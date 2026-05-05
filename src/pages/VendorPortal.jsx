@@ -80,52 +80,25 @@ export default function VendorPortal() {
 
   const handleSubmit = async () => {
     setSubmitting(true)
+    setError('')
+
+    // Save all answers first before anything else
     await saveProgress()
 
-    const allQuestions = questions
-    const allResponses = allQuestions.map(q => ({ answer: answers[q.id] || '' }))
+    // Mark as submitted immediately — answers are safe
+    const { error: submitError } = await supabase.from('questionnaires').update({
+      status: 'completed',
+      submitted_at: new Date().toISOString(),
+    }).eq('id', questionnaire.id)
 
-    try {
-      const res = await fetch('/api/evaluate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          assetName: questionnaire.asset_name,
-          tier: questionnaire.tier,
-          profile: {
-            data_sensitivity: questionnaire.data_sensitivity,
-            network_access: questionnaire.network_access,
-            integration_depth: questionnaire.integration_depth,
-            criticality: questionnaire.criticality,
-          },
-          questions: allQuestions,
-          responses: allResponses,
-        }),
-      })
-      const evaluation = await res.json()
-
-      await supabase.from('questionnaires').update({
-        status: 'completed',
-        verdict: evaluation.verdict,
-        score: evaluation.score,
-        summary: evaluation.summary,
-        submitted_at: new Date().toISOString(),
-      }).eq('id', questionnaire.id)
-
-      if (evaluation.flagged_responses?.length > 0) {
-        for (const idx of evaluation.flagged_responses) {
-          const q = allQuestions[idx]
-          if (q) {
-            const { data: resp } = await supabase.from('questionnaire_responses').select('id').eq('questionnaire_id', questionnaire.id).eq('question_id', q.id).single()
-            if (resp) await supabase.from('questionnaire_responses').update({ flagged: true }).eq('id', resp.id)
-          }
-        }
-      }
-
-      setSubmitted(true)
-    } catch (err) {
-      setError('Submission failed. Please try again.')
+    if (submitError) {
+      setError('Failed to save submission. Your answers are preserved — please try again.')
+      setSubmitting(false)
+      return
     }
+
+    // Show success immediately — evaluation happens in background
+    setSubmitted(true)
     setSubmitting(false)
   }
 

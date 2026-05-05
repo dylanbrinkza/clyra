@@ -14,57 +14,77 @@ export default async function handler(req, res) {
   const domains = domainsByTier[tier] || domainsByTier[3]
   const count = questionCounts[tier] || 15
 
-  const orgSection = orgContext ? `
-ORGANISATION CONTEXT:
-- Company: ${orgContext.company_name || 'Not specified'} | Industry: ${orgContext.industry || 'Not specified'}
-- Regulatory frameworks: ${orgContext.regulatory_frameworks?.join(', ') || 'Not specified'}
-- Data held: ${orgContext.data_types?.join(', ') || 'Not specified'}
-- Special category data: ${orgContext.special_category_data ? 'Yes' : 'No'}
-- Own certifications: ${orgContext.existing_certifications?.join(', ') || 'None'}
-- Risk appetite: ${orgContext.risk_appetite || 'Not specified'}
-- Compliance notes: ${orgContext.compliance_notes || 'None'}
+  // Org context informs DEPTH and FOCUS of questions only — never appears in question text
+  // Questions must be written from a neutral assessor perspective, not revealing the buyer's posture
+  const orgGuidance = orgContext ? `
+INTERNAL ASSESSOR GUIDANCE (do NOT include this information in any question text — use it only to determine which areas to probe more deeply):
+- Regulatory environment: ${orgContext.regulatory_frameworks?.join(', ') || 'not specified'}
+- Data held by our organisation: ${orgContext.data_types?.join(', ') || 'not specified'}
+- Our risk appetite: ${orgContext.risk_appetite || 'not specified'}
+- Our certifications: ${orgContext.existing_certifications?.join(', ') || 'none'}
+- Industry: ${orgContext.industry || 'not specified'}
 
-Use this context to make questions relevant to this organisation's specific obligations. For example:
-- If they are FCA regulated, probe vendor's financial data handling and SYSC-relevant controls
-- If they hold health data, probe DSPT/HIPAA relevant controls
-- If they hold children's data, probe age verification and COPPA/GDPR-K relevant controls
-- Frame questions around the organisation's actual regulatory exposure, not generic best practice
+USE THIS TO:
+- Prioritise questions relevant to our regulatory obligations (e.g. if GDPR regulated, weight data protection questions)
+- Probe deeper on areas where our risk appetite is low
+- Ask for certifications we would consider minimum standard
+- Focus on data types we actually hold
+
+DO NOT:
+- Mention our organisation, our certifications, our data holdings, or our regulatory status in any question
+- Write questions that reveal what the assessor knows about their own organisation
+- Assume the vendor knows anything about the buyer
 ` : ''
 
   const certContext = certifications.length > 0
-    ? `Vendor has provided: ${certifications.join(', ')}. Probe scope, exceptions and currency rather than basics for covered areas.`
+    ? `The vendor has provided the following certifications upfront: ${certifications.join(', ')}. For areas covered by these certifications, ask targeted follow-up questions about scope, expiry, and exceptions rather than basics. Focus deeper questioning on areas NOT covered.`
     : 'No certifications provided — question all domains thoroughly.'
 
-  const prompt = `You are a senior information security assessor with expertise in ISO 27001:2022, NIST CSF 2.0, CIS Controls v8, and Cyber Essentials.
-${orgSection}
+  const integrationContext = profile.integration_depth && !profile.integration_depth.toLowerCase().includes('standalone')
+    ? `Integration type: ${profile.integration_depth}`
+    : 'This is a standalone tool with no system integration.'
+
+  const prompt = `You are a neutral information security assessor writing a vendor security questionnaire on behalf of a client organisation. The questions will be sent directly to the vendor — they must be written from a neutral, professional assessor perspective.
+
+CRITICAL RULES:
+1. Questions must NEVER reveal information about the client organisation (their certifications, data holdings, regulatory status, or internal processes)
+2. Questions must be phrased as "Do you..." or "Can you provide..." or "What is your..." — from the vendor's perspective
+3. Do NOT write questions like "Given our X..." or "As we hold Y..." or "Given our organisation's Z..."
+4. Questions should be answerable by any vendor's security team without knowing anything about the client
+5. Where the vendor profile indicates standalone/no integration, do NOT ask about integration or API security
+
 VENDOR BEING ASSESSED:
-- Vendor: ${assetName}${vendorUrl ? ` (${vendorUrl})` : ''}
+- Vendor/product: ${assetName}${vendorUrl ? ` (${vendorUrl})` : ''}
 - Risk Tier: Tier ${tier}
 - Data sensitivity: ${profile.data_sensitivity}
 - Network access: ${profile.network_access}
-- Integration depth: ${profile.integration_depth}
+- ${integrationContext}
+- Physical access: ${profile.physical_access}
 - Criticality: ${profile.criticality}
+
+${orgGuidance}
 
 Certification context: ${certContext}
 
-Generate exactly ${count} questions covering: ${domains.join(', ')}.
+Generate exactly ${count} questions covering these domains: ${domains.join(', ')}.
 
 Each question must:
-- Be specific to this vendor's function and this organisation's context — not generic boilerplate
-- Reference all applicable frameworks with control references
-- Be answerable by a vendor's security or compliance team
+- Be specific to this vendor's product and function
+- Be phrased neutrally from an assessor perspective — never from the client's perspective
+- Reference applicable framework controls
+- Be answerable without the vendor knowing anything about the client
 
 Respond ONLY with a JSON array, no other text:
 [
   {
     "domain": "<domain>",
-    "question": "<specific question>",
-    "control_ref": "<ISO 27001:2022 ref e.g. A.8.2>",
-    "nist_ref": "<NIST CSF 2.0 ref e.g. PR.AC-01>",
-    "cis_ref": "<CIS Controls v8 ref e.g. CIS 5.1>",
+    "question": "<neutral, vendor-facing question>",
+    "control_ref": "<ISO 27001:2022 ref>",
+    "nist_ref": "<NIST CSF 2.0 ref>",
+    "cis_ref": "<CIS Controls v8 ref>",
     "ce_ref": "<Cyber Essentials ref or empty string>",
     "order_num": <number>,
-    "follow_up_trigger": "<condition or empty string>"
+    "follow_up_trigger": "<specific condition that triggers follow-up, written neutrally, or empty string>"
   }
 ]`
 
@@ -72,11 +92,36 @@ Respond ONLY with a JSON array, no other text:
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-api-key': process.env.ANTHROPIC_API_KEY, 'anthropic-version': '2023-06-01' },
-      body: JSON.stringify({ model: 'claude-sonnet-4-5', max_tokens: 4000, messages: [{ role: 'user', content: prompt }] }),
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-5',
+        max_tokens: 4000,
+        messages: [{ role: 'user', content: prompt }],
+      }),
     })
     const data = await response.json()
     if (!response.ok) return res.status(500).json({ error: data.error?.message || 'API error' })
-    return res.status(200).json(JSON.parse(data.content[0].text.replace(/```json|```/g, '').trim()))
+
+    const text = data.content[0].text.replace(/```json|```/g, '').trim()
+
+    // Handle truncated JSON gracefully
+    let questions
+    try {
+      questions = JSON.parse(text)
+    } catch {
+      // Try to recover partial JSON
+      const lastBracket = text.lastIndexOf('},')
+      if (lastBracket > 0) {
+        try {
+          questions = JSON.parse(text.substring(0, lastBracket + 1) + ']')
+        } catch {
+          return res.status(500).json({ error: 'Question generation produced malformed output. Please try again.' })
+        }
+      } else {
+        return res.status(500).json({ error: 'Question generation produced malformed output. Please try again.' })
+      }
+    }
+
+    return res.status(200).json(Array.isArray(questions) ? questions : [])
   } catch (err) {
     return res.status(500).json({ error: err.message })
   }

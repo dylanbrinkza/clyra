@@ -26,12 +26,7 @@ export default function Layout({ session }) {
     <div className="app">
       <div className="topbar">
         <div className="logo">Cly<em>ra</em></div>
-        <nav className="nav-links">
-          <NavLink to="/dashboard" className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}>Dashboard</NavLink>
-          <NavLink to="/assets" className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}>Vendors</NavLink>
-          <NavLink to="/risk" className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}>Risk</NavLink>
-          <NavLink to="/incidents" className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}>Incidents</NavLink>
-        </nav>
+        <div style={{ flex: 1 }} />
         <div className="user-area">
           <span style={{ fontSize: 12 }}>{email}</span>
           <div className="avatar" style={{ cursor: 'pointer' }} onClick={handleSignOut} title="Sign out">

@@ -73,6 +73,9 @@ Each question must:
 - Be phrased neutrally from an assessor perspective — never from the client's perspective
 - Reference applicable framework controls
 - Be answerable without the vendor knowing anything about the client
+- For DRP/BCP questions: NEVER assume a specific country or region for data centres. Ask "Where are your primary and secondary data centres located?" rather than assuming UK. Use neutral phrasing like "your primary processing location" not "your UK data centre".
+- For regulatory follow-up triggers: write them in plain English. For example instead of "If adverse regulatory findings exist" write "If the vendor has received any regulatory findings or enforcement actions, ask for details and remediation steps taken."
+- For SYSC/FCA questions: ask whether the vendor undergoes independent security assessments and can share findings — do not reference specific FCA supervisory processes in a way that assumes the vendor understands FCA internal terminology.
 
 Respond ONLY with a JSON array, no other text:
 [

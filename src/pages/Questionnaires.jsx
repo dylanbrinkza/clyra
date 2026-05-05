@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import { getOrgId } from '../lib/auth'
+import { getOrgId, getUserRole } from '../lib/auth'
 
 const verdictBadge = {
   'Accept': { bg: '#EAF3DE', color: 'var(--green)' },
@@ -14,8 +14,10 @@ export default function Questionnaires() {
   const navigate = useNavigate()
   const [questionnaires, setQuestionnaires] = useState([])
   const [loading, setLoading] = useState(true)
+  const [isAdmin, setIsAdmin] = useState(false)
 
   useEffect(() => {
+    getUserRole().then(r => setIsAdmin(r === 'admin' || r === 'org_admin'))
     async function fetch() {
       const orgId = await getOrgId()
       const { data, error } = await supabase
@@ -54,7 +56,7 @@ export default function Questionnaires() {
     <>
       <div className="page-header">
         <h2>Questionnaires</h2>
-        <button className="btn btn-primary" onClick={() => navigate('/questionnaires/new')}>+ New questionnaire</button>
+        {isAdmin && <button className="btn btn-primary" onClick={() => navigate('/questionnaires/new')}>+ New questionnaire</button>}
       </div>
       {pendingApproval.length > 0 && (
         <div style={{ marginBottom: '1.5rem' }}>
@@ -73,7 +75,7 @@ export default function Questionnaires() {
       ) : questionnaires.length === 0 && (
         <div className="card" style={{ textAlign: 'center', padding: '3rem', color: 'var(--muted)' }}>
           <div style={{ fontSize: 14, marginBottom: 8 }}>No questionnaires yet</div>
-          <button className="btn btn-primary" onClick={() => navigate('/questionnaires/new')}>+ New questionnaire</button>
+          {isAdmin && <button className="btn btn-primary" onClick={() => navigate('/questionnaires/new')}>+ New questionnaire</button>}
         </div>
       )}
     </>

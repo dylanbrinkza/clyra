@@ -1,6 +1,7 @@
 import { supabase } from './supabase'
 
 let cachedOrgId = null
+let cachedRole = null
 
 export async function isSuperAdmin(userId) {
   const { data } = await supabase
@@ -24,6 +25,20 @@ export async function getOrgId() {
   return cachedOrgId
 }
 
+export async function getUserRole() {
+  if (cachedRole) return cachedRole
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return null
+  const { data } = await supabase
+    .from('org_memberships')
+    .select('role')
+    .eq('user_id', user.id)
+    .single()
+  cachedRole = data?.role || 'member'
+  return cachedRole
+}
+
 export function clearOrgIdCache() {
   cachedOrgId = null
+  cachedRole = null
 }

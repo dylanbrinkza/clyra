@@ -96,6 +96,21 @@ export default function AdminPortal() {
     }
   }
 
+  const updateRole = async (userId, orgId, newRole) => {
+    await supabase
+      .from('org_memberships')
+      .update({ role: newRole })
+      .eq('user_id', userId)
+      .eq('org_id', orgId)
+    // Refresh orgs
+    await fetchOrgs()
+    setMembers(prev => {
+      const updated = { ...prev }
+      delete updated[orgId]
+      return updated
+    })
+  }
+
   const createOrg = async () => {
     if (!newOrgName.trim()) return
     setCreating(true)
@@ -230,15 +245,24 @@ export default function AdminPortal() {
                               </div>
                               <div>
                                 <div style={{ fontSize: 12, color: '#F5F0E8' }}>{m.email || m.user_id}</div>
-                                <div style={{ fontSize: 10, color: 'rgba(245,240,232,0.4)' }}>{m.role} · joined {new Date(m.created_at).toLocaleDateString()}</div>
+                                <div style={{ fontSize: 10, color: 'rgba(245,240,232,0.4)' }}>{m.role === 'admin' ? 'Org admin' : 'Member'} · joined {new Date(m.created_at).toLocaleDateString()}</div>
                               </div>
                             </div>
                             {!isAdmin && (
-                              <button
-                                onClick={() => setDeleteUserConfirm({ userId: m.user_id, orgId: org.id, orgName: org.name })}
-                                style={{ fontSize: 11, padding: '3px 10px', background: 'rgba(192,57,43,0.15)', color: '#ff6b6b', border: '0.5px solid rgba(192,57,43,0.3)', borderRadius: 4, cursor: 'pointer', fontFamily: 'inherit' }}>
-                                Remove
-                              </button>
+                              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                                <select
+                                  value={m.role || 'member'}
+                                  onChange={e => updateRole(m.user_id, org.id, e.target.value)}
+                                  style={{ fontSize: 11, padding: '3px 8px', background: 'rgba(245,240,232,0.08)', border: '0.5px solid rgba(245,240,232,0.2)', borderRadius: 4, color: '#F5F0E8', fontFamily: 'inherit', cursor: 'pointer' }}>
+                                  <option value="admin">Org admin</option>
+                                  <option value="member">Member</option>
+                                </select>
+                                <button
+                                  onClick={() => setDeleteUserConfirm({ userId: m.user_id, orgId: org.id, orgName: org.name })}
+                                  style={{ fontSize: 11, padding: '3px 10px', background: 'rgba(192,57,43,0.15)', color: '#ff6b6b', border: '0.5px solid rgba(192,57,43,0.3)', borderRadius: 4, cursor: 'pointer', fontFamily: 'inherit' }}>
+                                  Remove
+                                </button>
+                              </div>
                             )}
                           </div>
                         ))}

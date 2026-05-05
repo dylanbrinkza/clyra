@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import { getOrgId } from '../lib/auth'
+import { getOrgId, getUserRole } from '../lib/auth'
 import AssetLogo from '../components/AssetLogo'
 
 const severityColor = { red: 'var(--red)', amber: 'var(--amber)', gray: '#aaa', green: 'var(--green)' }
@@ -25,10 +25,14 @@ export default function AssetDetail() {
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('overview')
   const [showDeleteModal, setShowDeleteModal] = useState(false)
+  const [isAdmin, setIsAdmin] = useState(false)
   const [deleteReason, setDeleteReason] = useState('')
   const [deleting, setDeleting] = useState(false)
 
-  useEffect(() => { fetchAll() }, [id])
+  useEffect(() => {
+    fetchAll()
+    getUserRole().then(r => setIsAdmin(r === 'admin' || r === 'org_admin'))
+  }, [id])
 
   async function fetchAll() {
     const [assetRes, contactsRes, findingsRes, assuranceRes, qRes, auditRes] = await Promise.all([
@@ -134,7 +138,7 @@ export default function AssetDetail() {
             }}>{tab.label}</button>
           ))}
         </div>
-        {!isDeleted && (
+        {!isDeleted && isAdmin && (
           <button onClick={() => setShowDeleteModal(true)} style={{
             fontSize: 12, color: 'var(--red)', background: 'none',
             border: '0.5px solid var(--red)', borderRadius: 6,

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '../lib/supabase'
 import { clearOrgContextCache } from '../lib/orgContext'
-import { getOrgId } from '../lib/auth'
+import { getOrgId, getUserRole } from '../lib/auth'
 
 const industries = ['Financial Services', 'Healthcare', 'Legal', 'Technology', 'Retail & eCommerce', 'Manufacturing', 'Education', 'Government & Public Sector', 'Professional Services', 'Media & Entertainment', 'Energy & Utilities', 'Other']
 const employeeCounts = ['1–10', '11–50', '51–200', '201–500', '501–1,000', '1,001–5,000', '5,000+']
@@ -36,6 +36,7 @@ export default function OrgContext() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+  const [isAdmin, setIsAdmin] = useState(false)
   const [contextId, setContextId] = useState(null)
   const [form, setForm] = useState({
     company_name: '',
@@ -52,7 +53,10 @@ export default function OrgContext() {
     compliance_notes: '',
   })
 
-  useEffect(() => { fetchContext() }, [])
+  useEffect(() => {
+    fetchContext()
+    getUserRole().then(r => setIsAdmin(r === 'admin' || r === 'org_admin'))
+  }, [])
 
   async function fetchContext() {
     const { data: { user } } = await supabase.auth.getUser()
@@ -116,11 +120,16 @@ export default function OrgContext() {
           <h2 style={{ marginBottom: 4 }}>Organisation context</h2>
           <div style={{ fontSize: 13, color: 'var(--muted)' }}>This information is used by Claude to personalise all risk assessments, questionnaires, and recommendations to your organisation's specific situation.</div>
         </div>
-        <button className="btn btn-primary" onClick={handleSave} disabled={saving}>
+        <button className="btn btn-primary" onClick={handleSave} disabled={saving || !isAdmin}>
           {saving ? 'Saving...' : saved ? '✓ Saved' : 'Save context'}
         </button>
       </div>
 
+      {!isAdmin && (
+        <div style={{ background: '#FAEEDA', border: '0.5px solid var(--amber)', borderRadius: 8, padding: '10px 14px', marginBottom: 16, fontSize: 13, color: '#854F0B' }}>
+          ⚠ You have view-only access to organisation context. Contact your org admin to make changes.
+        </div>
+      )}
       {/* Completeness bar */}
       <div className="card" style={{ marginBottom: '1.5rem' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
@@ -135,7 +144,7 @@ export default function OrgContext() {
         </div>
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1.5rem', pointerEvents: isAdmin ? 'auto' : 'none', opacity: isAdmin ? 1 : 0.7 }}>
 
         {/* LEFT COLUMN */}
         <div>

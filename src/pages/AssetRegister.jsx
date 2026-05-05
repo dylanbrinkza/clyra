@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import { getOrgId } from '../lib/auth'
+import { getOrgId, getUserRole } from '../lib/auth'
 import AddAssetModal from '../components/AddAssetModal'
 import AssetLogo from '../components/AssetLogo'
 
@@ -13,13 +13,17 @@ export default function AssetRegister() {
   const [deletedAssets, setDeletedAssets] = useState([])
   const [loading, setLoading] = useState(true)
   const [showAdd, setShowAdd] = useState(false)
+  const [isAdmin, setIsAdmin] = useState(false)
   const [showDeleted, setShowDeleted] = useState(false)
   const [tierFilter, setTierFilter] = useState('all')
   const [statusFilter, setStatusFilter] = useState('all')
   const [typeFilter, setTypeFilter] = useState('all')
   const [search, setSearch] = useState('')
 
-  useEffect(() => { fetchAssets() }, [])
+  useEffect(() => {
+    fetchAssets()
+    getUserRole().then(r => setIsAdmin(r === 'admin' || r === 'org_admin'))
+  }, [])
 
   async function fetchAssets() {
     const orgId = await getOrgId()
@@ -81,7 +85,7 @@ export default function AssetRegister() {
       {showAdd && <AddAssetModal onClose={() => setShowAdd(false)} />}
       <div className="page-header">
         <h2>Asset register</h2>
-        <button className="btn btn-primary" onClick={() => setShowAdd(true)}>+ Add asset</button>
+{isAdmin && <button className="btn btn-primary" onClick={() => setShowAdd(true)}>+ Add asset</button>}
       </div>
       <div className="card">
         <div className="filter-row" style={{ marginBottom: 12 }}>

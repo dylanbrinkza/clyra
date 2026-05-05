@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { getOrgContext } from '../lib/orgContext'
-import { getOrgId } from '../lib/auth'
+import { getOrgId, getUserRole } from '../lib/auth'
 
 const steps = ['Risk profile', 'Tier assignment', 'Review & send']
 
@@ -47,6 +47,7 @@ export default function NewQuestionnaire() {
   const [step, setStep] = useState(0)
   const [orgContext, setOrgContext] = useState(null)
   const [orgLoaded, setOrgLoaded] = useState(false)
+  const [isAdmin, setIsAdmin] = useState(true)
 
   // Vendor details
   const [assetName, setAssetName] = useState(prefill.assetName || '')
@@ -85,6 +86,7 @@ export default function NewQuestionnaire() {
 
   useEffect(() => {
     getOrgContext().then(ctx => { setOrgContext(ctx); setOrgLoaded(true) })
+    getUserRole().then(r => setIsAdmin(r === 'admin' || r === 'org_admin'))
   }, [])
 
   const handleCertUpload = async (e) => {
@@ -212,6 +214,12 @@ export default function NewQuestionnaire() {
 
   return (
     <div style={{ maxWidth: 720, margin: '0 auto' }}>
+      {!isAdmin && (
+        <div style={{ background: '#FCEBEB', border: '0.5px solid var(--red)', borderRadius: 10, padding: '1rem 1.25rem', marginBottom: 16 }}>
+          <div style={{ fontSize: 14, fontWeight: 500, color: 'var(--red)', marginBottom: 4 }}>Access restricted</div>
+          <div style={{ fontSize: 13, color: 'var(--muted)' }}>Only org admins can create questionnaires. Contact your org admin.</div>
+        </div>
+      )}
       <div style={{ marginBottom: '2rem' }}>
         <button className="btn" onClick={() => navigate(-1)} style={{ marginBottom: 16 }}>← Back</button>
         <h2 style={{ fontSize: 18, fontWeight: 500, marginBottom: 12 }}>New questionnaire</h2>

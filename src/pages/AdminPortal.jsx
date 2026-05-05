@@ -15,6 +15,9 @@ export default function AdminPortal() {
   const [inviteLink, setInviteLink] = useState('')
   const [error, setError] = useState('')
   const [deleteConfirm, setDeleteConfirm] = useState(null)
+  const [deleteUserConfirm, setDeleteUserConfirm] = useState(null) // { userId, email, orgId }
+  const [members, setMembers] = useState({}) // orgId -> [{ user_id, role, email }]
+  const [loadingMembers, setLoadingMembers] = useState({})
 
   useEffect(() => { fetchOrgs() }, [])
 
@@ -26,15 +29,71 @@ export default function AdminPortal() {
 
     // Get asset and questionnaire counts per org
     const enriched = await Promise.all((orgsData || []).map(async org => {
-      const [{ count: assetCount }, { count: qCount }, invitesData] = await Promise.all([
+      const [{ count: assetCount }, { count: qCount }, invitesData, acceptedInvites] = await Promise.all([
         supabase.from('assets').select('*', { count: 'exact', head: true }).eq('org_id', org.id).is('deleted_at', null),
         supabase.from('questionnaires').select('*', { count: 'exact', head: true }).eq('org_id', org.id),
         supabase.from('org_invites').select('*').eq('org_id', org.id).eq('accepted', false),
+        supabase.from('org_invites').select('email, user_id').eq('org_id', org.id).eq('accepted', true),
       ])
-      return { ...org, asset_count: assetCount || 0, q_count: qCount || 0, pending_invites: invitesData.data || [] }
+      // Enrich memberships with emails from accepted invites
+      const enrichedMemberships = (org.org_memberships || []).map(m => ({
+        ...m,
+        email: acceptedInvites.data?.find(i => i.user_id === m.user_id)?.email || null,
+      }))
+      return { ...org, org_memberships: enrichedMemberships, asset_count: assetCount || 0, q_count: qCount || 0, pending_invites: invitesData.data || [] }
     }))
     setOrgs(enriched)
     setLoading(false)
+  }
+
+  const fetchMembers = async (orgId) => {
+    if (members[orgId]) return // already loaded
+    setLoadingMembers(prev => ({ ...prev, [orgId]: true }))
+    const { data } = await supabase
+      .from('org_memberships')
+      .select('user_id, role, created_at')
+      .eq('org_id', orgId)
+    // Get emails from org_invites (accepted) as proxy since we can't query auth.users directly
+    const { data: invites } = await supabase
+      .from('org_invites')
+      .select('email, token')
+      .eq('org_id', orgId)
+      .eq('accepted', true)
+    const enriched = (data || []).map(m => ({
+      ...m,
+      email: invites?.find(i => i.token)?.email || m.user_id,
+    }))
+    setMembers(prev => ({ ...prev, [orgId]: enriched }))
+    setLoadingMembers(prev => ({ ...prev, [orgId]: false }))
+  }
+
+  const deleteUser = async () => {
+    if (!deleteUserConfirm) return
+    try {
+      // Remove from org memberships
+      await supabase
+        .from('org_memberships')
+        .delete()
+        .eq('user_id', deleteUserConfirm.userId)
+        .eq('org_id', deleteUserConfirm.orgId)
+
+      // Reset their onboarding context so they can re-onboard if re-invited
+      await supabase
+        .from('organisation_context')
+        .delete()
+        .eq('user_id', deleteUserConfirm.userId)
+
+      setDeleteUserConfirm(null)
+      await fetchOrgs()
+      // Refresh members for this org
+      setMembers(prev => {
+        const updated = { ...prev }
+        delete updated[deleteUserConfirm.orgId]
+        return updated
+      })
+    } catch (err) {
+      setError(err.message)
+    }
   }
 
   const createOrg = async () => {
@@ -157,13 +216,31 @@ export default function AdminPortal() {
                       {org.pending_invites?.length > 0 && <span style={{ color: '#D4A97A' }}>{org.pending_invites.length} pending invite{org.pending_invites.length !== 1 ? 's' : ''}</span>}
                     </div>
 
-                    {/* Members */}
+                    {/* Members with delete */}
                     {org.org_memberships?.length > 0 && (
-                      <div style={{ marginTop: 10, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                      <div style={{ marginTop: 10 }}>
+                        <div style={{ fontSize: 11, color: 'rgba(245,240,232,0.4)', marginBottom: 6, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                          {org.org_memberships.length} member{org.org_memberships.length !== 1 ? 's' : ''}
+                        </div>
                         {org.org_memberships.map((m, i) => (
-                          <span key={i} style={{ fontSize: 11, padding: '2px 8px', background: 'rgba(245,240,232,0.08)', borderRadius: 12, color: 'rgba(245,240,232,0.6)' }}>
-                            {m.role}
-                          </span>
+                          <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '6px 10px', background: 'rgba(245,240,232,0.06)', borderRadius: 6, marginBottom: 4 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                              <div style={{ width: 24, height: 24, borderRadius: '50%', background: 'rgba(245,240,232,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, color: '#F5F0E8' }}>
+                                {(m.email || m.user_id || '?')[0].toUpperCase()}
+                              </div>
+                              <div>
+                                <div style={{ fontSize: 12, color: '#F5F0E8' }}>{m.email || m.user_id}</div>
+                                <div style={{ fontSize: 10, color: 'rgba(245,240,232,0.4)' }}>{m.role} · joined {new Date(m.created_at).toLocaleDateString()}</div>
+                              </div>
+                            </div>
+                            {!isAdmin && (
+                              <button
+                                onClick={() => setDeleteUserConfirm({ userId: m.user_id, orgId: org.id, orgName: org.name })}
+                                style={{ fontSize: 11, padding: '3px 10px', background: 'rgba(192,57,43,0.15)', color: '#ff6b6b', border: '0.5px solid rgba(192,57,43,0.3)', borderRadius: 4, cursor: 'pointer', fontFamily: 'inherit' }}>
+                                Remove
+                              </button>
+                            )}
+                          </div>
                         ))}
                       </div>
                     )}
@@ -250,6 +327,26 @@ export default function AdminPortal() {
             )}
             {error && <div style={{ fontSize: 12, color: '#ff6b6b', marginBottom: 12 }}>{error}</div>}
             <button onClick={() => { setShowInvite(null); setInviteLink(''); setInviteEmail('') }} style={{ width: '100%', padding: '8px', background: 'none', border: '0.5px solid rgba(245,240,232,0.15)', borderRadius: 8, color: 'rgba(245,240,232,0.6)', cursor: 'pointer', fontFamily: 'inherit', fontSize: 13 }}>Close</button>
+          </div>
+        </div>
+      )}
+
+      {/* Delete User Modal */}
+      {deleteUserConfirm && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 200, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div onClick={() => setDeleteUserConfirm(null)} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,0.6)' }} />
+          <div style={{ position: 'relative', background: '#1A1208', border: '0.5px solid rgba(245,240,232,0.15)', borderRadius: 12, padding: '1.5rem', width: 420, zIndex: 1 }}>
+            <div style={{ fontSize: 15, fontWeight: 500, marginBottom: 8 }}>Remove user from {deleteUserConfirm.orgName}?</div>
+            <div style={{ fontSize: 13, color: 'rgba(245,240,232,0.5)', marginBottom: 8, lineHeight: 1.5 }}>
+              This will remove the user from the organisation and delete their onboarding context. They will need to be re-invited to regain access.
+            </div>
+            <div style={{ fontSize: 12, padding: '8px 10px', background: 'rgba(245,240,232,0.06)', borderRadius: 6, marginBottom: 20, color: 'rgba(245,240,232,0.5)', wordBreak: 'break-all' }}>
+              User ID: {deleteUserConfirm.userId}
+            </div>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={() => setDeleteUserConfirm(null)} style={{ flex: 1, padding: '8px', background: 'none', border: '0.5px solid rgba(245,240,232,0.15)', borderRadius: 8, color: 'rgba(245,240,232,0.6)', cursor: 'pointer', fontFamily: 'inherit', fontSize: 13 }}>Cancel</button>
+              <button onClick={deleteUser} style={{ flex: 2, padding: '8px', background: '#C0392B', color: '#fff', border: 'none', borderRadius: 8, fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' }}>Remove user</button>
+            </div>
           </div>
         </div>
       )}

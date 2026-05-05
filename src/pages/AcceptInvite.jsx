@@ -55,8 +55,8 @@ export default function AcceptInvite() {
         role: invite.role || 'admin',
       }])
 
-      // Mark invite accepted
-      await supabase.from('org_invites').update({ accepted: true }).eq('token', token)
+      // Mark invite accepted and store user_id for admin panel
+      await supabase.from('org_invites').update({ accepted: true, user_id: userId }).eq('token', token)
 
       // Sign in
       await supabase.auth.signInWithPassword({ email: invite.email, password })

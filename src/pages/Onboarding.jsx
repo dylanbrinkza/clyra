@@ -227,18 +227,11 @@ export default function Onboarding({ onComplete, setOnboardingComplete }) {
                   </select>
                 </div>
                 <div>
-                  <label style={labelStyle}>Technical environment</label>
-                  <select value={org.tech_environment} onChange={e => setOrgField('tech_environment', e.target.value)} style={inputStyle}>
-                    <option value="">Select...</option>
-                    {techEnvironments.map(t => <option key={t}>{t}</option>)}
-                  </select>
-                </div>
-              </div>
-
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 16 }}>
-                <div>
                   <label style={labelStyle}>Primary countries of operation</label>
-                  <input value={org.countries.join(', ')} onChange={e => setOrgField('countries', e.target.value.split(',').map(s => s.trim()).filter(Boolean))}
+                  <input
+                    value={org.countries.join(', ')}
+                    onChange={e => setOrgField('countries', e.target.value ? e.target.value.split(',').map(s => s.trimStart()) : [])}
+                    onBlur={e => setOrgField('countries', e.target.value.split(',').map(s => s.trim()).filter(Boolean))}
                     placeholder="United Kingdom, Ireland, USA..." style={inputStyle} />
                   <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>Comma separated</div>
                 </div>

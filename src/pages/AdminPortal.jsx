@@ -18,6 +18,7 @@ export default function AdminPortal() {
   const [deleteUserConfirm, setDeleteUserConfirm] = useState(null)
   const [resetPasswordModal, setResetPasswordModal] = useState(null)
   const [resetSent, setResetSent] = useState(false)
+  const [resendLink, setResendLink] = useState(null)
 
   // Form state
   const [newOrgName, setNewOrgName] = useState('')
@@ -130,6 +131,24 @@ export default function AdminPortal() {
       redirectTo: `${window.location.origin}/reset-password`,
     })
     if (!error) setResetSent(true)
+  }
+
+  const cancelInvite = async (inviteId) => {
+    await supabase.from('org_invites').delete().eq('id', inviteId)
+    await fetchAll()
+  }
+
+  const resendInvite = async (invite) => {
+    // Delete old invite and create a new one with fresh expiry
+    await supabase.from('org_invites').delete().eq('id', invite.id)
+    const { data } = await supabase.from('org_invites')
+      .insert([{ org_id: invite.org_id, email: invite.email, role: invite.role || 'member' }])
+      .select().single()
+    if (data) {
+      // Show the new link
+      setResendLink({ email: invite.email, link: `${window.location.origin}/invite/${data.token}` })
+    }
+    await fetchAll()
   }
 
   const signOut = async () => {
@@ -299,10 +318,11 @@ export default function AdminPortal() {
                 {org.pending_invites.length > 0 && (
                   <div style={{ padding: '8px 1.25rem 10px', background: 'rgba(212,169,122,0.04)', borderTop: '0.5px solid rgba(212,169,122,0.1)' }}>
                     {org.pending_invites.map(inv => (
-                      <div key={inv.id} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 12, color: 'rgba(245,240,232,0.5)', padding: '4px 0' }}>
+                      <div key={inv.id} style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 12, color: 'rgba(245,240,232,0.5)', padding: '6px 0' }}>
                         <span style={{ color: '#D4A97A' }}>⏳</span>
-                        <span>Invite pending: <strong style={{ color: '#D4A97A' }}>{inv.email}</strong></span>
-                        <span>expires {new Date(inv.expires_at).toLocaleDateString()}</span>
+                        <span style={{ flex: 1 }}>Invite pending: <strong style={{ color: '#D4A97A' }}>{inv.email}</strong> · expires {new Date(inv.expires_at).toLocaleDateString()}</span>
+                        <button onClick={() => resendInvite({ ...inv, org_id: org.id })} style={smallGhostBtn}>Resend</button>
+                        <button onClick={() => cancelInvite(inv.id)} style={smallDangerBtn}>Cancel</button>
                       </div>
                     ))}
                   </div>
@@ -369,6 +389,21 @@ export default function AdminPortal() {
           </div>
         )}
       </div>
+
+      {/* RESEND LINK MODAL */}
+      {resendLink && (
+        <Modal onClose={() => setResendLink(null)}>
+          <div style={{ fontSize: 16, fontWeight: 500, marginBottom: 8 }}>New invite link generated</div>
+          <div style={{ fontSize: 13, color: 'rgba(245,240,232,0.5)', marginBottom: 16 }}>
+            Fresh invite link for <strong style={{ color: '#D4A97A' }}>{resendLink.email}</strong> — expires in 7 days
+          </div>
+          <div style={{ padding: '12px', background: 'rgba(245,240,232,0.04)', borderRadius: 8, border: '0.5px solid rgba(245,240,232,0.1)', marginBottom: 16 }}>
+            <div style={{ fontSize: 12, color: 'rgba(245,240,232,0.6)', wordBreak: 'break-all', lineHeight: 1.5 }}>{resendLink.link}</div>
+          </div>
+          <button onClick={() => { navigator.clipboard.writeText(resendLink.link) }} style={{ ...ghostBtn, width: '100%', marginBottom: 10 }}>Copy link</button>
+          <button onClick={() => setResendLink(null)} style={{ ...ghostBtn, width: '100%' }}>Close</button>
+        </Modal>
+      )}
 
       {/* CREATE ORG MODAL */}
       {showCreateOrg && (

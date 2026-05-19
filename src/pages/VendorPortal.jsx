@@ -197,9 +197,12 @@ export default function VendorPortal() {
     <div style={{ minHeight: '100vh', background: '#F7F3EE', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <div style={{ textAlign: 'center', maxWidth: 480, padding: '2rem' }}>
         <div style={{ width: 64, height: 64, borderRadius: '50%', background: '#EAF3DE', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 28, margin: '0 auto 24px' }}>✓</div>
-        <div style={{ fontSize: 22, fontWeight: 500, color: '#2C1F0E', marginBottom: 12 }}>Questionnaire submitted</div>
-        <div style={{ fontSize: 14, color: '#6B5E4F', lineHeight: 1.7 }}>
-          Thank you for completing the security questionnaire for <strong>{questionnaire?.asset_name}</strong>. Your responses have been received and are being reviewed.
+        <div style={{ fontSize: 22, fontWeight: 500, color: '#2C1F0E', marginBottom: 12 }}>Responses received</div>
+        <div style={{ fontSize: 14, color: '#6B5E4F', lineHeight: 1.7, marginBottom: 16 }}>
+          Thank you for completing the security questionnaire for <strong>{questionnaire?.asset_name}</strong>. Your responses have been saved and we are now collating the information for review.
+        </div>
+        <div style={{ fontSize: 13, color: '#6B5E4F', padding: '12px 16px', background: '#EAF3DE', borderRadius: 8, lineHeight: 1.6 }}>
+          You do not need to take any further action. The assessor will be in touch if any follow-up is required.
         </div>
       </div>
     </div>
@@ -307,7 +310,7 @@ export default function VendorPortal() {
               Save progress
             </button>
             <button onClick={handleSubmit} disabled={submitting} style={{ flex: 2, padding: '10px', background: '#2C1F0E', color: '#F5F0E8', border: 'none', borderRadius: 8, fontSize: 13, fontWeight: 500, cursor: submitting ? 'not-allowed' : 'pointer', opacity: submitting ? 0.7 : 1, fontFamily: 'inherit' }}>
-              {submitting ? 'Submitting...' : 'Submit questionnaire'}
+              {submitting ? 'Saving your responses...' : 'Submit questionnaire'}
             </button>
           </div>
         </div>

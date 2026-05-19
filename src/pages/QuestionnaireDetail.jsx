@@ -295,8 +295,8 @@ export default function QuestionnaireDetail() {
         <div style={{ background: '#E6F1FB', border: '1px solid #B3D4F0', borderRadius: 12, padding: '1rem 1.5rem', marginBottom: '1.5rem', display: 'flex', alignItems: 'center', gap: 12 }}>
           <span style={{ width: 16, height: 16, border: '2px solid #185FA5', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 0.8s linear infinite', display: 'inline-block', flexShrink: 0 }} />
           <div>
-            <div style={{ fontSize: 13, fontWeight: 500, color: '#185FA5' }}>AI evaluation in progress</div>
-            <div style={{ fontSize: 12, color: '#185FA5', opacity: 0.8 }}>This runs automatically after vendor submission. Usually takes 30–60 seconds.</div>
+            <div style={{ fontSize: 13, fontWeight: 500, color: '#185FA5' }}>Responses received — collating for evaluation</div>
+            <div style={{ fontSize: 12, color: '#185FA5', opacity: 0.8 }}>AI evaluation is running in the background. This usually takes 30–90 seconds. The page will update automatically.</div>
           </div>
           <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
         </div>
@@ -437,8 +437,8 @@ export default function QuestionnaireDetail() {
             <div className="card">
               <div style={{ fontSize: 14, fontWeight: 500, marginBottom: 6 }}>Responses received</div>
               <div style={{ fontSize: 13, color: 'var(--muted)', lineHeight: 1.5, marginBottom: 12 }}>
-                AI evaluation runs automatically after submission — it may still be processing. Click below to trigger manually if it hasn't completed.
-                {orgContext && <span style={{ color: 'var(--green)' }}> Org context will be applied.</span>}
+                Vendor responses have been received. The AI evaluation runs automatically — if it has not completed after 2 minutes, click below to trigger it manually.
+                {orgContext && <span style={{ color: 'var(--green)' }}> Your org context will be applied.</span>}
               </div>
               {error && (
                 <div style={{ fontSize: 12, color: 'var(--red)', padding: '8px 12px', background: '#FCEBEB', borderRadius: 6, marginBottom: 12 }}>

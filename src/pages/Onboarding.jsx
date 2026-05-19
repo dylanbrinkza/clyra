@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { clearOrgContextCache } from '../lib/orgContext'
 
-const industries = ['Financial Services', 'Healthcare', 'Legal', 'Technology', 'Retail & eCommerce', 'Manufacturing', 'Education', 'Government & Public Sector', 'Professional Services', 'Media & Entertainment', 'Energy & Utilities', 'Other']
+const industries = ['Financial Services', 'Healthcare', 'Legal', 'Technology', 'Retail & eCommerce', 'Hospitality & Tourism', 'Manufacturing', 'Education', 'Government & Public Sector', 'Professional Services', 'Media & Entertainment', 'Energy & Utilities', 'Other']
 const employeeCounts = ['1–10', '11–50', '51–200', '201–500', '501–1,000', '1,001–5,000', '5,000+']
 const riskAppetites = ['Very low — we avoid risk wherever possible', 'Low — we accept minimal risk with strong controls', 'Medium — we balance risk and opportunity', 'High — we accept more risk to enable growth']
 const techEnvironments = ['Cloud-first (majority SaaS/PaaS)', 'Hybrid (mix of cloud and on-premise)', 'On-premise majority', 'Multi-cloud', 'Legacy/mainframe heavy']

@@ -6,7 +6,7 @@ import { getOrgId, getUserRole } from '../lib/auth'
 
 const steps = ['Risk profile', 'Tier assignment', 'Review & send']
 
-const dataSensitivityOptions = ['None', 'Non-personal', 'Personal data', 'Special category', 'Financial', 'Health data', 'Biometric data', "Children's data"]
+const dataSensitivityOptions = ['None', 'Non-personal', 'Personal data', 'Special category', 'Financial', 'Health data', 'Legal data', 'Biometric data', "Children's data"]
 
 const profileFields = [
   { key: 'physical_access', label: 'Physical access', options: ['None', 'Site access', 'Data centre or server room access'] },
@@ -62,6 +62,10 @@ export default function NewQuestionnaire() {
   const [contractFile, setContractFile] = useState(null)
   const [tosUrl, setTosUrl] = useState('')
   const [privacyUrl, setPrivacyUrl] = useState('')
+  const [securityPolicyUrl, setSecurityPolicyUrl] = useState('')
+  const [trustCentreUrl, setTrustCentreUrl] = useState('')
+  const [dpaUrl, setDpaUrl] = useState('')
+  const [subprocessorsUrl, setSubprocessorsUrl] = useState('')
   const [integrationNotes, setIntegrationNotes] = useState('')
   const [integrationDepths, setIntegrationDepths] = useState(['Standalone'])
   const [dataSensitivity, setDataSensitivity] = useState([])
@@ -137,7 +141,7 @@ export default function NewQuestionnaire() {
       const res = await fetch('/api/profile', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ assetName, vendorUrl, profile: profilePayload, certifications: uploadedCerts.map(c => c.cert_type), orgContext }),
+        body: JSON.stringify({ assetName, vendorUrl, assetDescription, trustCentreUrl, securityPolicyUrl, profile: profilePayload, certifications: uploadedCerts.map(c => c.cert_type), orgContext }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
@@ -147,7 +151,7 @@ export default function NewQuestionnaire() {
       const res2 = await fetch('/api/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ assetName, vendorUrl, tier: data.tier, profile: profilePayload, certifications: uploadedCerts.map(c => c.cert_type), orgContext }),
+        body: JSON.stringify({ assetName, vendorUrl, assetDescription, trustCentreUrl, securityPolicyUrl, tier: data.tier, profile: profilePayload, certifications: uploadedCerts.map(c => c.cert_type), orgContext }),
       })
       const qs = await res2.json()
       if (!res2.ok) throw new Error(qs.error)
@@ -327,6 +331,32 @@ export default function NewQuestionnaire() {
               <div>
                 <label style={labelStyle}>Privacy Policy URL</label>
                 <input value={privacyUrl} onChange={e => setPrivacyUrl(e.target.value)} placeholder="https://vendor.com/privacy" style={inputStyle} />
+              </div>
+            </div>
+          </div>
+
+          {/* Security documentation URLs */}
+          <div style={{ marginBottom: 16, padding: '12px 14px', background: 'var(--cream)', borderRadius: 8 }}>
+            <div style={{ fontSize: 12, fontWeight: 500, marginBottom: 10 }}>Security documentation URLs</div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 10 }}>
+              <div>
+                <label style={labelStyle}>Security policy URL</label>
+                <input value={securityPolicyUrl} onChange={e => setSecurityPolicyUrl(e.target.value)} placeholder="https://vendor.com/security" style={inputStyle} />
+              </div>
+              <div>
+                <label style={labelStyle}>Trust centre URL</label>
+                <input value={trustCentreUrl} onChange={e => setTrustCentreUrl(e.target.value)} placeholder="https://trust.vendor.com" style={inputStyle} />
+                <div style={{ fontSize: 11, color: 'var(--muted)', marginTop: 4 }}>Claude will use this to understand available documentation</div>
+              </div>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+              <div>
+                <label style={labelStyle}>DPA / Data Processing Agreement URL</label>
+                <input value={dpaUrl} onChange={e => setDpaUrl(e.target.value)} placeholder="https://vendor.com/dpa" style={inputStyle} />
+              </div>
+              <div>
+                <label style={labelStyle}>Sub-processors list URL</label>
+                <input value={subprocessorsUrl} onChange={e => setSubprocessorsUrl(e.target.value)} placeholder="https://vendor.com/subprocessors" style={inputStyle} />
               </div>
             </div>
           </div>
